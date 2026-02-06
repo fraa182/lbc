@@ -1,8 +1,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
-#include "../src/lbm_step.h"
+#include "../src/include/lbm.h"
 #define Q 9
+#define save_iter 100
 
 int main(){
 
@@ -93,7 +94,7 @@ int main(){
         printf("Step %d of %d\n",it+1,Nt);
 
         // Execute the streaming and colliding steps
-        lbm_step(Nx,Ny,f,f_new,rho,u,v,cx,cy,w,opp,omega_eff,solid_mask,i_in,U_in,i_out,rho0);
+        main_lbm(Nx,Ny,f,f_new,rho,u,v,cx,cy,w,opp,omega_eff,solid_mask,i_in,U_in,i_out,rho0);
 
         // Swap f and f_new
         for (int j = 0; j < Ny; j++){
@@ -106,37 +107,14 @@ int main(){
             }
         }
 
-        // Write solution (rho, u, v) on a ".vtk" file each 100 iterations
-        if (it % 100 == 0){
+        // Ensure that the "sol" directory exists and, if not, create it
+        ensure_directory_exists("sol");
+
+        // Write solution (rho, u, v) on a ".vtk" file each save_iter iterations
+        if (it % save_iter == 0){
             char filename[256];
             snprintf(filename, sizeof(filename),"sol/fields_%05d.vtk", it);
-            FILE *fd = fopen(filename, "w");
-
-            fprintf(fd, "# vtk DataFile Version 3.0\n");
-            fprintf(fd, "2D Grid Data\n");
-            fprintf(fd, "ASCII\n");
-            fprintf(fd, "DATASET STRUCTURED_POINTS\n");
-            fprintf(fd, "DIMENSIONS %d %d 1\n", Nx, Ny);
-            fprintf(fd, "ORIGIN 0 0 0\n");
-            fprintf(fd, "SPACING %f %f 0\n", vx_size, vx_size);
-            fprintf(fd, "\nPOINT_DATA %d\n", Nx*Ny);
-
-            fprintf(fd, "VECTORS velocity float\n");
-            for (int j=0; j < Ny; j++){
-                for (int i=0; i < Nx; i++){
-                    fprintf(fd, "%f %f 0.0\n", u[j][i], v[j][i]);
-                }
-            }
-
-            fprintf(fd, "\nSCALARS density float 1\n");
-            fprintf(fd, "LOOKUP_TABLE default\n");
-            for (int j = 0; j < Ny; j++){
-                for (int i = 0; i < Nx; i++){
-                    fprintf(fd, "%f\n", rho[j][i]);
-                }
-            }
-
-            fclose(fd);
+            write_vtk_binary_2D(filename,Nx,Ny,vx_size,u,v,rho);
         }
 
     }
