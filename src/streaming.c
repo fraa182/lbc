@@ -4,6 +4,7 @@ void streaming(
     int Q,
     double f[Ny][Nx][Q],
     double f_new[Ny][Nx][Q],
+    int solid_mask[Ny][Nx],
     int cx[],
     int cy[]
 )
@@ -20,6 +21,9 @@ void streaming(
                 int j_src = j - (int)cy[k];
                 if (j_src < 0)      j_src += Ny;
                 if (j_src >= Ny)    j_src -= Ny;
+
+                if (solid_mask[j_src][i_src]) continue;
+                if (solid_mask[j][i]) continue;
 
                 f_new[j][i][k] = f[j_src][i_src][k];
             }

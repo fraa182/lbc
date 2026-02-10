@@ -11,7 +11,9 @@ void compute_macroscopic_fields(
     int cy[],
     double rho[Ny][Nx],
     double u[Ny][Nx],
-    double v[Ny][Nx]
+    double v[Ny][Nx],
+    double Fx,
+    double Fy
 )
 {
     for (int i = 0; i < Nx; i++) {
@@ -34,8 +36,8 @@ void compute_macroscopic_fields(
 
             if (!solid_mask[j][i]) {
                 rho[j][i] = s;
-                u[j][i]   = sx / s;
-                v[j][i]   = sy / s;
+                u[j][i]   = (sx + 0.5*Fx) / s;
+                v[j][i]   = (sy + 0.5*Fy) / s;
             } else {
                 rho[j][i] = NAN;
                 u[j][i]   = NAN;

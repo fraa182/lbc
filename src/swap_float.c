@@ -1,7 +1,4 @@
-#ifndef SWAP_FLOAT_H
-#define SWAP_FLOAT_H
-
-static inline float swap_float(float val)
+float swap_float(float val)
 {
     union {
         float f;
@@ -16,5 +13,3 @@ static inline float swap_float(float val)
 
     return dst.f;
 }
-
-#endif

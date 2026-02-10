@@ -1,4 +1,4 @@
-void pressure_outlet(
+void velocity_outlet(
     int Nx, 
     int Ny,
     int Q, 
@@ -14,7 +14,8 @@ void pressure_outlet(
     int cy[],
     double w[]
 ) {
-    double rho_out = val1; 
+    double U_out = val1; 
+    double V_out = val2;
     int i_out = index;
     
     for (int j = 0; j < Ny; j++) {
@@ -28,8 +29,7 @@ void pressure_outlet(
         double f5 = f_new[j][i_out][5];
         double f8 = f_new[j][i_out][8];
 
-        double U_out = (f0 + f2 + f4 + 2.0*(f1 + f5 + f8)) / rho_out - 1.0;
-        double V_out = v[j][i_out-1];
+        double rho_out = (f0 + f2 + f4 + 2.0*(f1 + f5 + f8)) / (1.0 + U_out);
 
         f_new[j][i_out][3] = f1 - (2.0/3.0)*rho_out*U_out;
         f_new[j][i_out][6] = f8 - 0.5*(f2 - f4) - (1.0/6.0)*rho_out*U_out + (1.0/2.0)*rho_out*V_out;

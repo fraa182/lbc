@@ -1,5 +1,7 @@
 #include <stdio.h>
-#include "include/swap_float.h"
+#include "include/lbm_utils.h"
+#define R 287.05
+#define T 298.15
 
 void write_vtk_binary_2D(
     const char *filename,
@@ -8,7 +10,9 @@ void write_vtk_binary_2D(
     double dx,
     double u[Ny][Nx],
     double v[Ny][Nx],
-    double rho[Ny][Nx]
+    double rho[Ny][Nx],
+    double cu,
+    double crho
 )    
 {
     FILE *fd = fopen(filename, "wb");
@@ -33,8 +37,8 @@ void write_vtk_binary_2D(
     for (int j = 0; j < Ny; j++) {
         for (int i = 0; i < Nx; i++) {
             float vec[3];
-            vec[0] = swap_float(u[j][i]);
-            vec[1] = swap_float(v[j][i]);
+            vec[0] = swap_float(u[j][i]*cu);
+            vec[1] = swap_float(v[j][i]*cu);
             vec[2] = swap_float(0.0f);
             fwrite(vec, sizeof(float), 3, fd);
         }
@@ -46,7 +50,18 @@ void write_vtk_binary_2D(
 
     for (int j = 0; j < Ny; j++) {
         for (int i = 0; i < Nx; i++) {
-            float r = swap_float(rho[j][i]);
+            float r = swap_float(rho[j][i]*crho);
+            fwrite(&r, sizeof(float), 1, fd);
+        }
+    }
+
+    /* ---- Pressure field ---- */
+    fprintf(fd, "\nSCALARS pressure float 1\n");
+    fprintf(fd, "LOOKUP_TABLE default\n");
+
+    for (int j = 0; j < Ny; j++) {
+        for (int i = 0; i < Nx; i++) {
+            float r = swap_float((rho[j][i]*crho)*R*T);
             fwrite(&r, sizeof(float), 1, fd);
         }
     }

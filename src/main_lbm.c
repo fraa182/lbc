@@ -1,11 +1,11 @@
 #include <stdio.h>
 #include <math.h>
 #include "include/lbm.h"
-#define Q 9
 
 void main_lbm(
     int Nx,
     int Ny, 
+    int Q,
     double f[Ny][Nx][Q], 
     double f_new[Ny][Nx][Q], 
     double rho[Ny][Nx], 
@@ -17,28 +17,32 @@ void main_lbm(
     int opp[], 
     double omega_eff[Ny][Nx], 
     int solid_mask[Ny][Nx], 
-    int i_in, 
-    double U_in, 
-    int i_out, 
-    double rho_out)
+    Boundary boundaries[],
+    int num_boundaries,
+    double Fx,
+    double Fy)
 {
 
     // Collision step
-    collision(Nx,Ny,Q,f,rho,u,v,omega_eff,solid_mask,cx,cy,w);
+    collision(Nx,Ny,Q,f,rho,u,v,omega_eff,solid_mask,cx,cy,w,Fx,Fy);
 
     // Bounce-back boundary condition at solid walls
-    bounce_back(Nx,Ny,Q,f_new,solid_mask,opp);
+    bounce_back(Nx,Ny,Q,f,f_new,solid_mask,cx,cy,opp);
 
     // Streaming step
-    streaming(Nx,Ny,Q,f,f_new,cx,cy);
+    streaming(Nx,Ny,Q,f,f_new,solid_mask,cx,cy);
 
-    // Velocity inlet
-    velocity_inlet(Nx,Ny,Q,i_in,U_in,rho_out,f_new,u,v,solid_mask,cx,cy,w);
-
-    // Pressure outlet
-    pressure_outlet(Nx,Ny,Q,i_out,rho_out,f_new,rho,u,v,solid_mask,cx,cy,w);
+    // Inlet and outlet BCs
+    for (int i = 0; i < num_boundaries; i++) {
+        boundaries[i].apply(
+            Nx, Ny, Q, 
+            boundaries[i].index, 
+            boundaries[i].val1, boundaries[i].val2,
+            f_new, rho, u, v, solid_mask, cx, cy, w
+        );
+    }
     
     // Compute macroscopic quantities
-    compute_macroscopic_fields(Nx,Ny,Q,f_new,solid_mask,cx,cy,rho,u,v);
+    compute_macroscopic_fields(Nx,Ny,Q,f_new,solid_mask,cx,cy,rho,u,v,Fx,Fy);
 
 }
