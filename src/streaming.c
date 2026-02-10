@@ -13,15 +13,12 @@ void streaming(
         for (int i = 0; i < Nx; i++) {
 
             int i_src = i - (int)cx[k];
-            if (i_src < 0)      i_src += Nx;
-            if (i_src >= Nx)    i_src -= Nx;
 
             for (int j = 0; j < Ny; j++) {
 
                 int j_src = j - (int)cy[k];
-                if (j_src < 0)      j_src += Ny;
-                if (j_src >= Ny)    j_src -= Ny;
 
+                if (i_src < 0 || i_src >= Nx || j_src < 0 || j_src >= Ny) continue;
                 if (solid_mask[j_src][i_src]) continue;
                 if (solid_mask[j][i]) continue;
 

@@ -6,17 +6,36 @@
 #define Q 9
 #define save_iter 100
 
-int main(){
+int main(int argc, char *argv[]){
+
+    // Check if the correct number of arguments is provided
+    if (argc < 4) {
+        fprintf(stderr, "Usage: %s <res> <tau> <simulation time>\n", argv[0]);
+        fprintf(stderr, "Example: %s 10 0.90 25\n", argv[0]);
+        return 1;
+    }
+
+    // UI quantities
+    int res = atoi(argv[1]);                      // Resolution (voxels per char length) [-]
+    double tau = atof(argv[2]);                   // Relaxation time in lattice units [-]
+    double tf = atof(argv[3]);                    // Simulation time [s]
+
+    // Safety check for tau (LBM stability)
+    if (tau <= 0.5) {
+        fprintf(stderr, "Error: tau must be greater than 0.5 for stability.\n");
+        return 1;
+    }
+
+    printf("Running simulation with res=%d, tau=%.3f for %.2f seconds\n", res, tau, tf);
 
     // Physical parameters
-    int res = 50;                                 // Resolution (voxels per char length) [-]
-    int Nt = 50000;                               // Number of timesteps [-]
+    
     double nu = 1.5e-5;                           // Kinematic viscosity [m^2/s]
     double Lx = 0.100;                            // Domain x-size [m]
     double Ly = 0.025;                            // Domain y-size (char length) [m]
-    double dx = Ly / res;                         // Voxel size [m]
 
     // Lattice domain
+    double dx = Ly / res;                         // Voxel size [m]
     int Nx = Lx / dx;                             // Number of voxels along x [-]
     int Ny = Ly / dx;                             // Number of voxels along y [-]
     double rho0 = 1.0;                            // Char lattice density [kg/m^3]
@@ -26,24 +45,15 @@ int main(){
     double Fy = 0.0;
 
     // Boundary conditions
-    int num_boundaries = 2;                       // Number of boundaries [-]
+    int num_boundaries = 1;                       // Number of boundaries [-]
     Boundary boundaries[num_boundaries];          // Define the Boundary struct
-
-    boundaries[0].index = 0;                      // Inlet BC index
-    boundaries[0].val1 = 1.1*rho0;                // Inlet BC value (1)
-    boundaries[0].val2 = 0.0;                     // Inlet BC value (2)
-    boundaries[0].apply = convective_inlet;       // Inlet BC type
-
-    boundaries[1].index = Nx - 1;                 // Outlet BC indes
-    boundaries[1].val1 = rho0;                    // Outlet BC value (1)
-    boundaries[1].val2 = 0.0;                     // Outlet BC value (2)
-    boundaries[1].apply = convective_outlet;      // Outlet BC type
+    boundaries[0].apply = periodic_x;             // BC type
 
     // Lattice quantities
-    double tau = 0.90;                            // Relaxation time in lattice units [-]
     double ct = (tau - 0.5)*(dx*dx)/(3*nu);       // Timestep [s]
     double crho = rho0;                           // Lattice density conversion factor [kg/m^3]
     double cu = dx / ct;                          // Lattice velocity conversion factor [m/s]
+    int Nt = tf / ct;                             // Number of timesteps [-]
 
     // Lattice velocity x and y components (D2Q9)
     int cx[Q] = {0, 1, 0, -1, 0, 1, -1, -1, 1};
@@ -120,7 +130,7 @@ int main(){
         // Write solution (rho, u, v) on a ".vtk" file each save_iter iterations
         if (it % save_iter == 0){
             char filename[256];
-            snprintf(filename, sizeof(filename),"sol/fields_%05d.vtk", it);
+            snprintf(filename, sizeof(filename),"sol/fields_res_%d_%05d.vtk", res, it);
             write_vtk_binary_2D(filename,Nx,Ny,dx,u,v,rho,cu,crho);
         }
     }

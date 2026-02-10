@@ -38,7 +38,7 @@ void main_lbm(
             Nx, Ny, Q, 
             boundaries[i].index, 
             boundaries[i].val1, boundaries[i].val2,
-            f_new, rho, u, v, solid_mask, cx, cy, w
+            f, f_new, rho, u, v, solid_mask, cx, cy, w
         );
     }
     

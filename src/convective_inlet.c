@@ -5,6 +5,7 @@ void convective_inlet(
     int index,
     double val1, 
     double val2,
+    double f[Ny][Nx][Q],
     double f_new[Ny][Nx][Q], 
     double rho[Ny][Nx], 
     double u[Ny][Nx], 
