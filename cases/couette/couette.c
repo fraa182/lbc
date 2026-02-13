@@ -30,7 +30,7 @@ int main(int argc, char *argv[]){
     }
 
     // Relative tolerance on centreline velocity convergence
-    double dvmax_toll = 1e-10;
+    double dvmax_toll = 1e-16;
 
     // Lattice domain (we work in lattice units here so dx = 1 and cu = 1, they are just for export)
     int Nx = 50;                                  // Number of voxels along x [-]
@@ -41,13 +41,19 @@ int main(int argc, char *argv[]){
     double cu = 1.0;                              // Lattice velocity conversion factor [m/s]
 
     // Forcing (lattice units)
-    double Fx = 2.0e-5;
+    double Fx = 0.0;
     double Fy = 0.0;
 
     // Boundary conditions
-    int num_boundaries = 1;                       // Number of boundaries [-]
+    int num_boundaries = 2;                       // Number of boundaries [-]
     Boundary boundaries[num_boundaries];          // Define the Boundary struct
-    boundaries[0].apply = periodic_x;             // BC type    
+
+    boundaries[0].apply = periodic_x;             // BC type (1)
+    
+    boundaries[1].apply = velocity_top;           // BC type (2)
+    boundaries[1].index = Ny - 1;                 // BC index (2)
+    boundaries[1].val1 = 0.1;                     // BC value for U (2)
+    boundaries[1].val2 = 0.0;                     // BC value for V (2)
     
     // Check if there is a periodic BC along x and/or y
     int isperiodic_x = 0;
@@ -71,7 +77,7 @@ int main(int argc, char *argv[]){
     int (*solid_mask)[Nx] = malloc(Ny * sizeof *solid_mask);
     for (int j = 0; j < Ny; j++){
         for (int i = 0; i < Nx; i++){
-            solid_mask[j][i] = ((j == 0) || (j == Ny-1)) ? 1 : 0;
+            solid_mask[j][i] = (j == 0) ? 1 : 0;
         }
     }
 
@@ -109,7 +115,7 @@ int main(int argc, char *argv[]){
 
     // Initialize velocity difference and centreline axial velocity at previous step
     double dv = 1;
-    double ux_center_prec = 0;
+    double ux_center_prec = 1;
 
     // Temporal loop
     for (int it = 0; it < Nt_max; it++){
@@ -122,11 +128,11 @@ int main(int argc, char *argv[]){
         f_new = temp_ptr;
 
         // Check the maximum lattice velocity
-        double ux_center = 0.0;
+        double ux_ref = 0.0;
         for (int i = 0; i < Nx; i++){
-            ux_center += u[Ny/2][i];
+            ux_ref += u[Ny-2][i];
         }
-        ux_center /= (double)Nx;
+        ux_ref /= (double)Nx;
 
         double umax = 0.0;
         for (int j = 0; j < Ny; j++){
@@ -142,7 +148,7 @@ int main(int argc, char *argv[]){
         }
 
         // Print the timestep
-        if (it % save_iter == 0) printf("Step %d of %d - centre velocity: %f\n", it+1, Nt_max, ux_center);
+        if (it % save_iter == 0) printf("Step %d of %d - ref velocity: %f\n", it+1, Nt_max, ux_ref);
 
         // Ensure that the "sol" directory exists and, if not, create it
         ensure_directory_exists("sol");
@@ -155,14 +161,14 @@ int main(int argc, char *argv[]){
         }
 
         // Exit from the loop if the maximum velocity does not change from the previous iteration (within tolerance)
-        double denom = fabs(ux_center);
+        double denom = fabs(ux_ref);
         if (denom > 1e-12){
-            dv = fabs(ux_center - ux_center_prec)/denom;
+            dv = fabs(ux_ref - ux_center_prec)/denom;
         } else {
-            dv = fabs(ux_center - ux_center_prec);
+            dv = fabs(ux_ref - ux_center_prec);
         }
         
-        ux_center_prec = ux_center;
+        ux_center_prec = ux_ref;
 
         if (dv <= dvmax_toll) {
             printf("Stopping at iteration %d (dv=%g)\n", it, dv);

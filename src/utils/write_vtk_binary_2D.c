@@ -1,5 +1,5 @@
 #include <stdio.h>
-#include "include/lbm_utils.h"
+#include "lbm_utils.h"
 #define R 287.05
 #define T 298.15
 

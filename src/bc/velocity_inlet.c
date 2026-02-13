@@ -1,4 +1,4 @@
-void pressure_inlet(
+void velocity_inlet(
     int Nx,
     int Ny,
     int Q, 
@@ -15,9 +15,11 @@ void pressure_inlet(
     int cy[],
     double w[]
 ) {
-    double rho_in = val1;
+    double U_in = val1;
+    double V_in = val2;
     int i_in = index;
     
+    #pragma omp parallel for
     for (int j = 0; j < Ny; j++) {
 
         if (solid_mask[j][i_in]) continue;
@@ -29,8 +31,7 @@ void pressure_inlet(
         double f6 = f_new[j][i_in][6];
         double f7 = f_new[j][i_in][7];
 
-        double U_in = 1.0 - (f0 + f2 + f4 + 2.0*(f3 + f6 + f7)) / rho_in;
-        double V_in = v[j][i_in + 1];
+        double rho_in = (f0 + f2 + f4 + 2.0*(f3 + f6 + f7)) / (1.0 - U_in);
 
         f_new[j][i_in][1] = f3 + (2.0/3.0)*rho_in*U_in;
         f_new[j][i_in][5] = f7 + (1.0/6.0)*rho_in*U_in - 0.5*(f2 - f4);

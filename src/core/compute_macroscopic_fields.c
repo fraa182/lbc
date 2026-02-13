@@ -16,6 +16,7 @@ void compute_macroscopic_fields(
     double Fy
 )
 {
+    #pragma omp parallel for
     for (int i = 0; i < Nx; i++) {
         for (int j = 0; j < Ny; j++) {
 

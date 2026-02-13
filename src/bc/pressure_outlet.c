@@ -18,6 +18,7 @@ void pressure_outlet(
     double rho_out = val1; 
     int i_out = index;
     
+    #pragma omp parallel for
     for (int j = 0; j < Ny; j++) {
 
         if (solid_mask[j][i_out]) continue;

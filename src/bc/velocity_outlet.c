@@ -19,6 +19,7 @@ void velocity_outlet(
     double V_out = val2;
     int i_out = index;
     
+    #pragma omp parallel for
     for (int j = 0; j < Ny; j++) {
 
         if (solid_mask[j][i_out]) continue;

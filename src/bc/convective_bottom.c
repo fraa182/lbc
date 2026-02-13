@@ -1,4 +1,4 @@
-void convective_inlet(
+void convective_bottom(
     int Nx, 
     int Ny,
     int Q, 
@@ -15,14 +15,14 @@ void convective_inlet(
     int cy[],
     double w[]
 ) {
-    int i_in = index;
+    int j_bottom = index;
 
-    for (int j = 0; j < Ny; j++) {
+    for (int i = 0; i < Nx; i++) {
 
-        if (solid_mask[j][i_in]) continue;
+        if (solid_mask[j_bottom][i]) continue;
 
         for (int k = 0; k < Q; k++){
-            f_new[j][i_in][k] = f_new[j][i_in+1][k];
+            f_new[j_bottom][i][k] = f_new[j_bottom+1][i][k];
         }
     }
 }

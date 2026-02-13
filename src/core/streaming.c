@@ -9,14 +9,13 @@ void streaming(
     int cy[]
 )
 {
-    for (int k = 0; k < Q; k++) {
-        for (int i = 0; i < Nx; i++) {
+    #pragma omp parallel for
+    for (int i = 0; i < Nx; i++) {
+        for (int j = 0; j < Ny; j++) {
+            for (int k = 0; k < Q; k++) {
 
-            int i_src = i - (int)cx[k];
-
-            for (int j = 0; j < Ny; j++) {
-
-                int j_src = j - (int)cy[k];
+                int i_src = i - cx[k];
+                int j_src = j - cy[k];
 
                 if (i_src < 0 || i_src >= Nx || j_src < 0 || j_src >= Ny) continue;
                 if (solid_mask[j_src][i_src]) continue;

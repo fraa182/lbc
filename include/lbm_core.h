@@ -20,6 +20,8 @@ void main_lbm(
     int solid_mask[Ny][Nx], 
     Boundary boundaries[],
     int num_boundaries,
+    int isperiodic_x,
+    int isperiodic_y,
     double Fx,
     double Fy
 );

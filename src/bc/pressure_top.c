@@ -1,4 +1,4 @@
-void convective_outlet(
+void pressure_top(
     int Nx, 
     int Ny,
     int Q, 
@@ -15,14 +15,5 @@ void convective_outlet(
     int cy[],
     double w[]
 ) {
-    int i_out = index;
-
-    for (int j = 0; j < Ny; j++) {
-
-        if (solid_mask[j][i_out]) continue;
-
-        for (int k = 0; k < Q; k++){
-            f_new[j][i_out][k] = f_new[j][i_out-1][k];
-        }
-    }
+    
 }

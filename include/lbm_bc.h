@@ -10,7 +10,9 @@ void bounce_back(
     int solid_mask[Ny][Nx],
     int cx[],
     int cy[],
-    int opp[]
+    int opp[],
+    int isperiodic_x,
+    int isperiodic_y
 );
 
 void interpolated_bounce_back(
@@ -23,7 +25,9 @@ void interpolated_bounce_back(
     double q[Ny][Nx][Q],
     int opp[],
     int cx[],
-    int cy[]
+    int cy[],
+    int isperiodic_x,
+    int isperiodic_y
 );
 
 void convective_inlet(
@@ -116,6 +120,24 @@ void periodic_x(
     double w[]
 );
 
+void periodic_y(
+    int Nx, 
+    int Ny,
+    int Q, 
+    int index,
+    double val1, 
+    double val2,
+    double f[Ny][Nx][Q],
+    double f_new[Ny][Nx][Q], 
+    double rho[Ny][Nx], 
+    double u[Ny][Nx], 
+    double v[Ny][Nx], 
+    int solid_mask[Ny][Nx], 
+    int cx[],
+    int cy[],
+    double w[]
+);
+
 void velocity_inlet(
     int Nx, 
     int Ny,
@@ -135,6 +157,42 @@ void velocity_inlet(
 );
 
 void velocity_outlet(
+    int Nx, 
+    int Ny,
+    int Q, 
+    int index,
+    double val1, 
+    double val2,
+    double f[Ny][Nx][Q],
+    double f_new[Ny][Nx][Q], 
+    double rho[Ny][Nx], 
+    double u[Ny][Nx], 
+    double v[Ny][Nx], 
+    int solid_mask[Ny][Nx], 
+    int cx[],
+    int cy[],
+    double w[]
+);
+
+void velocity_top(
+    int Nx, 
+    int Ny,
+    int Q, 
+    int index,
+    double val1, 
+    double val2,
+    double f[Ny][Nx][Q],
+    double f_new[Ny][Nx][Q], 
+    double rho[Ny][Nx], 
+    double u[Ny][Nx], 
+    double v[Ny][Nx], 
+    int solid_mask[Ny][Nx], 
+    int cx[],
+    int cy[],
+    double w[]
+);
+
+void velocity_bottom(
     int Nx, 
     int Ny,
     int Q, 
