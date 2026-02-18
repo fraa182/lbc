@@ -22,17 +22,22 @@ void main_lbm(
     int isperiodic_x,
     int isperiodic_y,
     double Fx,
-    double Fy)
+    double Fy,
+    double *L,
+    double *D
+)
 {
-
     // Collision step
     collision(Nx,Ny,Q,f,rho,u,v,omega_eff,solid_mask,cx,cy,w,Fx,Fy);
 
     // Bounce-back boundary condition at solid walls
     bounce_back(Nx,Ny,Q,f,f_new,solid_mask,cx,cy,opp,isperiodic_x,isperiodic_y);
 
+    // Compute the forces on the cylinder surface with momentum exchange method (MEM)
+    compute_force_mem(Nx,Ny,Q,f,f_new,solid_mask,isperiodic_x,isperiodic_y,cx,cy,opp,D,L);
+
     // Streaming step
-    streaming(Nx,Ny,Q,f,f_new,solid_mask,cx,cy);
+    streaming(Nx,Ny,Q,f,f_new,solid_mask,cx,cy,isperiodic_x,isperiodic_y);
 
     // Boundary conditions
     for (int i = 0; i < num_boundaries; i++) {
@@ -46,5 +51,4 @@ void main_lbm(
     
     // Compute macroscopic quantities
     compute_macroscopic_fields(Nx,Ny,Q,f_new,solid_mask,cx,cy,rho,u,v,Fx,Fy);
-
 }

@@ -46,17 +46,13 @@ void interpolated_bounce_back(
 
                 // Apply IBB (Bouzidi)
                 if (q[j][i][k] <= 0.5) {
-                    f_new[j][i][opp[k]] =
-                        (1.0 - 2.0*q[j][i][k]) * f[j][i][k]
-                      + 2.0*q[j][i][k] * f[jn][in][k];
+                    f_new[j][i][opp[k]] = (1.0 - 2.0*q[j][i][k]) * f[j][i][k] + 2.0*q[j][i][k] * f[jn][in][k];
                 } else {
                     if (solid_mask[jn][in]) {
                         f_new[j][i][opp[k]] = f[j][i][k];
                     } else {
-                    f_new[j][i][opp[k]] =
-                        (1.0 / (2.0*q[j][i][k])) * f[j][i][k]
-                      + (2.0*q[j][i][k] - 1.0) / (2.0*q[j][i][k]) * f[jn][in][opp[k]];
-                      }
+                        f_new[j][i][opp[k]] = (1.0 / (2.0*q[j][i][k])) * f[j][i][k] + (2.0*q[j][i][k] - 1.0) / (2.0*q[j][i][k]) * f[jn][in][opp[k]];
+                    }
                 }
             }
         }

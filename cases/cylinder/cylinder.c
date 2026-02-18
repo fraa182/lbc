@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include <string.h>
+#include <omp.h>
 #include "lbm.h"
 #define Q 9
 #define save_iter 100
@@ -9,53 +10,69 @@
 int main(int argc, char *argv[]){
 
     // Check if the correct number of arguments is provided
-    if (argc < 4) {
-        fprintf(stderr, "Usage: %s <res> <tau> <max iterations>\n", argv[0]);
-        fprintf(stderr, "Example: %s 10 0.90 100000\n", argv[0]);
+    if (argc < 5) {
+        fprintf(stderr, "Usage: %s <res> <Re> <tau> <iterations>\n", argv[0]);
+        fprintf(stderr, "Example: %s 10 100 0.9 10000\n", argv[0]);
         return 1;
     }
 
     // UI quantities
     int res = atoi(argv[1]);                      // Resolution (voxels per char length) [-]
     double Reynolds = atof(argv[2]);              // Reynolds number based on U_inf and D = 2R [-]
-    int Nt_max = atoi(argv[3]);                   // Maximum number of timesteps [-]
+    double tau = atof(argv[3]);                   // Relaxation time [-]
+    int Nt_max = atoi(argv[4]);                   // Maximum number of timesteps [-]
 
-    printf("Running simulation with res=%d, Re=%f for max %d iterations\n", res, Reynolds, Nt_max);
+    printf("Running simulation with res=%d, Re=%f, tau=%f, for max %d iterations\n", res, Reynolds, tau, Nt_max);
 
-    // Physical parameters
-    double R = 0.001;                             // Char length [m]
+    // Physical parameters (physical units)
+    double R = 1.0;                               // Char length [m]
+    double Lx = 50*R;                             // Domain x-size [m]
+    double Ly = 20*R;                             // Domain y-size [m]
+    double U_inf = 1.0;                           // Inlet axial velocity [m/s]
+    double nu = U_inf * (2*R) / Reynolds;         // Kinematic viscosity [m^2/s]
+    double dCD_toll = 1e-6;                       // Relative tolerance on CD [-]
+
+    // Lattice domain (lattice units)
     double dx = R / res;                          // Voxel size [m]
-    double Lx = 0.05;                             // Domain x-size [m]
-    double Ly = 0.02;                             // Domain y-size [m]
+    int Nx = Lx / dx;                             // Number of voxels along x
+    int Ny = Ly / dx;                             // Number of voxels along y
+    double rho_inf = 1.0;                         // Char lattice density
 
-    // Lattice domain
-    int Nx = Lx / dx;                             // Number of voxels along x [-]
-    int Ny = Ly / dx;                             // Number of voxels along y [-]
-    double U_in = 0.1;                            // Char lattice velocity [m/s]
-    double rho0 = 1.0;                            // Char lattice density [kg/m^3]
-
-    // Lattice quantities
-    double nu = U_in*(2*R)/Reynolds;              // Kinematic viscosity [m^2/s]
-    double crho = rho0;                           // Lattice density conversion factor [kg/m^3]
-    double tau = 0.9;                             // Relaxation time in lattice units [-]
+    // Conversion factors (physical to lattice units)
+    double crho = rho_inf;                        // Lattice density conversion factor [kg/m^3]
     double cu = 3.0*nu/(dx*(tau - 0.5));          // Lattice velocity conversion factor [m/s]
+    double dt = dx / cu;                          // Time step [s]
+    double cf = (crho*cu*cu*dx);                  // Lattice force conversion factor [N] -> we are in 2D so tehre is just dx!
+    double fref = (0.5*rho_inf*U_inf*U_inf*2*R);  // Reference force to compute CL and CD
 
     // Forcing (lattice units)
     double Fx = 0.0;
     double Fy = 0.0;
 
+    // Initial conditions (lattice units)
+    double U_in = U_inf / cu;                     // Initial horizontal velocity
+    double V_in = 0.0;                            // Initial vertical velocity
+    double rho_in = rho_inf;                      // Initial density
+
+    // Check lattice Mach number
+    double cs = 1.0/sqrt(3.0);
+    double Ma = fabs(U_in)/cs;
+    if (Ma > 0.2) fprintf(stderr,"Warning: Lattice Ma too high (%.2f), reduce U_inf or increase res or change tau to stay below 0.20\n", Ma);
+
     // Boundary conditions
-    int num_boundaries = 2;
+    int num_boundaries = 3;
     Boundary boundaries[num_boundaries];
 
-    boundaries[0].index = 0;
-    boundaries[0].val1 = U_in;
-    boundaries[0].val2 = 0.0;
-    boundaries[0].apply = velocity_inlet; 
+    boundaries[0].apply = periodic_y;
 
-    boundaries[1].index = Nx - 1;
-    boundaries[1].val1 = rho0;
-    boundaries[1].apply = convective_outlet;
+    boundaries[1].index = 0;
+    boundaries[1].val1 = U_in;
+    boundaries[1].val2 = 0.0;
+    boundaries[1].apply = velocity_inlet; 
+
+    boundaries[2].index = Nx - 1;
+    boundaries[2].val1 = rho_inf;
+    boundaries[2].apply = convective_outlet;
 
     // Check if there is a periodic BC along x and/or y
     int isperiodic_x = 0;
@@ -102,8 +119,8 @@ int main(int argc, char *argv[]){
     for (int j = 0; j < Ny; j++){
         for (int i = 0; i < Nx; i++){
             u[j][i] = U_in;
-            v[j][i] = 0.0;
-            rho[j][i] = 1.0;
+            v[j][i] = V_in;
+            rho[j][i] = rho_in;
         }
     }
     
@@ -117,34 +134,71 @@ int main(int argc, char *argv[]){
             double v_sq = ux*ux + uy*uy;
 
             for (int k = 0; k < Q; k++){
-                double cu  = cx[k]*ux + cy[k]*uy;
-                f[j][i][k] = w[k]*rho[j][i]*(1.0 + 3.0*cu + 4.5*cu*cu - 1.5*v_sq);;
+                double c_dot_u  = cx[k]*ux + cy[k]*uy;
+                f[j][i][k] = w[k]*rho[j][i]*(1.0 + 3.0*c_dot_u + 4.5*c_dot_u*c_dot_u - 1.5*v_sq);;
             }
         }
     }
     memcpy(f_new, f, Ny*sizeof(*f));
 
+    // Define and initialize the lift and drag forces on the cylinder surface (physical units)
+    double L = 0.0;
+    double D = 0.0;
+    double CD = 0.0;
+    double CD_prec = 1.0;
+    double dCD = 1.0;
+
+    // Ensure that the "sol" directory exists and, if not, create it
+    ensure_directory_exists("sol");
+
+    char filename_forces[256];
+    snprintf(filename_forces, sizeof(filename_forces),"sol/forces_res_%d_Re_%.2f_tau_%.2f.bin", res, Reynolds, tau);
+
+    FILE *fp = fopen(filename_forces, "w");
+
+    struct Record {
+        double time;
+        double L;
+        double D;
+    };
+
     // Temporal loop
+    struct Record rec;
     for (int it = 0; it < Nt_max; it++){
+        // Compute CD
+        CD = D*cf/fref;
+
         // Print the timestep
-        if (it % save_iter == 0) printf("Step %d of %d\n",it+1,Nt_max);
+        if (it % save_iter == 0) printf("Step %d of %d - CD = %.4f - dCD = %g\n",it+1, Nt_max, CD, dCD);
 
         // Execute the streaming and colliding steps
-        main_lbm(Nx,Ny,Q,f,f_new,rho,u,v,cx,cy,w,opp,omega_eff,solid_mask,boundaries,num_boundaries,isperiodic_x,isperiodic_y,Fx,Fy);
+        main_lbm(Nx,Ny,Q,f,f_new,rho,u,v,cx,cy,w,opp,omega_eff,solid_mask,boundaries,num_boundaries,isperiodic_x,isperiodic_y,Fx,Fy,&L,&D);
+
+        // Write forces
+        rec.time = it*dt;
+        rec.L = L*cf;
+        rec.D = D*cf;
+        fwrite(&rec, sizeof(struct Record), 1, fp);
 
         // Swap f and f_new
         double (*temp_ptr)[Nx][Q] = f;
         f = f_new;
         f_new = temp_ptr;
 
-        // Ensure that the "sol" directory exists and, if not, create it
-        ensure_directory_exists("sol");
-
         // Write solution (rho, u, v) on a ".vtk" file each save_iter iterations
         if (it % save_iter == 0){
             char filename[256];
-            snprintf(filename, sizeof(filename),"sol/fields_%05d.vtk", it);
+            snprintf(filename, sizeof(filename),"sol/fields_res_%d_Re_%f_tau_%f_%05d.vtk", res, Reynolds, tau, it);
             write_vtk_binary_2D(filename,Nx,Ny,dx,u,v,rho,cu,crho);
+        }
+
+        // Check convergence on CD
+        dCD = fabs(CD - CD_prec);
+        if (dCD <= dCD_toll) {
+            printf("Stopping at iteration %d (dCD=%g)\n", it, dCD);
+            break;
+        } else {
+            CD_prec = CD;
         }
     }
 

@@ -23,7 +23,9 @@ void main_lbm(
     int isperiodic_x,
     int isperiodic_y,
     double Fx,
-    double Fy
+    double Fy,
+    double *L,
+    double *D
 );
 
 void collision(
@@ -51,7 +53,9 @@ void streaming(
     double f_new[Ny][Nx][Q],
     int solid_mask[Ny][Nx],
     int cx[],
-    int cy[]
+    int cy[],
+    int isperiodic_x,
+    int isperiodic_y
 );
 
 void compute_macroscopic_fields(
@@ -67,6 +71,22 @@ void compute_macroscopic_fields(
     double v[Ny][Nx],
     double Fx,
     double Fy
+);
+
+void compute_force_mem(
+    int Nx, 
+    int Ny,
+    int Q,
+    double f[Ny][Nx][Q],
+    double f_new[Ny][Nx][Q],
+    int solid_mask[Ny][Nx],
+    int isperiodic_x,
+    int isperiodic_y,
+    const int cx[Q], 
+    const int cy[Q],
+    const int opp[Q],
+    double *Fx, 
+    double *Fy
 );
 
 #endif

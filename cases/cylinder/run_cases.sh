@@ -8,14 +8,26 @@ make
 echo "Done!"
 echo ""
 
-itermax=1000000
-Re=150
+itermax=100000
 
-echo "Grid resolution study..."
+Re=20
+echo "Grid resolution study at Re = $Re..."
 for res in $(seq 10 10 50)
 do
     echo ""
-    ./cylinder.o $res $Re $itermax
+    tau=$(awk -v r="$res" -v RE="$Re" 'BEGIN { print (6 * 0.2 * r) / (sqrt(3) * RE) + 0.5 }')
+    ./cylinder.o $res $Re $tau $itermax
+    echo "------------------------------"
+done
+echo ""
+
+Re=100
+echo "Grid resolution study at Re = $Re..."
+for res in $(seq 10 10 50)
+do
+    echo ""
+    tau=$(awk -v r="$res" -v RE="$Re" 'BEGIN { print (6 * 0.2 * r) / (sqrt(3) * RE) + 0.5 }')
+    ./cylinder.o $res $Re $tau $itermax
     echo "------------------------------"
 done
 echo ""

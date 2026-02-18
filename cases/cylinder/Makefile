@@ -27,3 +27,4 @@ $(TARGET).o: $(SRCS)
 clean:
 	rm -f $(TARGET).o
 	rm -f sol/*.vtk
+	rm -f sol/*.bin
