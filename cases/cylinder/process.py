@@ -47,6 +47,27 @@ R = 1.0
 rho_inf = 1.0
 U_inf = 1.0
 
+dt_struct = np.dtype([('time', 'f8'), ('L', 'f8'), ('D', 'f8')])
+data_noIBB = np.fromfile(f"sol/noIBB_forces_res_{20}_Re_{20:^.2f}_tau_{0.7:^.2f}.bin", dtype=dt_struct)
+data_IBB = np.fromfile(f"sol/IBB_forces_res_{20}_Re_{20:^.2f}_tau_{0.7:^.2f}.bin", dtype=dt_struct)
+
+plt.figure()
+plt.subplot(211)
+plt.plot(data_noIBB['time'], data_noIBB['L']/(0.5* rho_inf * U_inf**2 * 2*R), 'b', label="No IBB")
+plt.plot(data_IBB['time'], data_IBB['L']/(0.5* rho_inf * U_inf**2 * 2*R), 'r', label="IBB")
+plt.ylabel("$c_l$ [-]")
+plt.legend()
+
+plt.subplot(212)
+plt.plot(data_noIBB['time'], data_noIBB['D']/(0.5* rho_inf * U_inf**2 * 2*R), 'b', label="No IBB")
+plt.plot(data_IBB['time'], data_IBB['D']/(0.5* rho_inf * U_inf**2 * 2*R), 'r', label="IBB")
+plt.ylabel("$c_d$ [-]")
+plt.xlabel("$t$ [s]")
+plt.legend()
+
+plt.show()
+
+#%%
 res_vec = [10, 20, 30, 40, 50]
 Re_vec = [20, 100]
 tau_vec = [0.85, 0.57]

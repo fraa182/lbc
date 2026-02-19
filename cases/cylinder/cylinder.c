@@ -176,7 +176,7 @@ int main(int argc, char *argv[]){
         if (it % save_iter == 0) printf("Step %d of %d - CD = %.4f - dCD = %g\n ",it+1, Nt_max, CD, dCD);
 
         // Execute the streaming and colliding steps
-        main_lbm(Nx,Ny,Q,f,f_new,rho,u,v,cx,cy,w,opp,omega_eff,solid_mask,boundaries,num_boundaries,isperiodic_x,isperiodic_y,Fx,Fy,&L,&D,phi,&use_IBB);
+        main_lbm(Nx,Ny,Q,f,f_new,rho,u,v,cx,cy,w,opp,omega_eff,solid_mask,boundaries,num_boundaries,isperiodic_x,isperiodic_y,Fx,Fy,&L,&D,phi,use_IBB);
 
         // Write forces
         rec.time = it*dt;

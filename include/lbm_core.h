@@ -27,7 +27,7 @@ void main_lbm(
     double *L,
     double *D,
     double phi[Ny][Nx],
-    int *use_IBB
+    int use_IBB
 );
 
 void collision(
