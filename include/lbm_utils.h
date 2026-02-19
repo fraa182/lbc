@@ -3,8 +3,6 @@
 
 int ensure_directory_exists(const char *path);
 
-float swap_float(float val);
-
 void write_vtk_binary_2D(
     const char *filename,
     int Nx,

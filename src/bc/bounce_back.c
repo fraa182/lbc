@@ -39,7 +39,7 @@ void bounce_back(
                     if (jn < 0 || jn >= Ny) continue;
                 }
 
-                // Avoid solid mask
+                // Avoid fluid
                 if (!solid_mask[jn][in]) continue;
 
                 // Apply bounce-back (BB)

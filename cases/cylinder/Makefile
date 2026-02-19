@@ -1,5 +1,6 @@
 CC = gcc
 CFLAGS = -Wall -O3 -I../../include
+CC = gcc
 LDFLAGS = -lm -fopenmp
 
 # Source directories

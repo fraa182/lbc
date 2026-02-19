@@ -16,7 +16,7 @@ void main_lbm(
     double w[], 
     int opp[], 
     double omega_eff[Ny][Nx], 
-    int solid_mask[Ny][Nx], 
+    int solid_mask[Ny][Nx],
     Boundary boundaries[],
     int num_boundaries,
     int isperiodic_x,
@@ -24,14 +24,20 @@ void main_lbm(
     double Fx,
     double Fy,
     double *L,
-    double *D
+    double *D,
+    double phi[Ny][Nx],
+    int *use_IBB
 )
 {
     // Collision step
     collision(Nx,Ny,Q,f,rho,u,v,omega_eff,solid_mask,cx,cy,w,Fx,Fy);
 
     // Bounce-back boundary condition at solid walls
-    bounce_back(Nx,Ny,Q,f,f_new,solid_mask,cx,cy,opp,isperiodic_x,isperiodic_y);
+    if (use_IBB){
+        interpolated_bounce_back(Nx,Ny,Q,f,f_new,solid_mask,phi,opp,cx,cy,isperiodic_x,isperiodic_y);
+    } else {
+        bounce_back(Nx,Ny,Q,f,f_new,solid_mask,cx,cy,opp,isperiodic_x,isperiodic_y);
+    }
 
     // Compute the forces on the cylinder surface with momentum exchange method (MEM)
     compute_force_mem(Nx,Ny,Q,f,f_new,solid_mask,isperiodic_x,isperiodic_y,cx,cy,opp,D,L);

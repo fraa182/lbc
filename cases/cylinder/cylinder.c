@@ -11,8 +11,8 @@ int main(int argc, char *argv[]){
 
     // Check if the correct number of arguments is provided
     if (argc < 5) {
-        fprintf(stderr, "Usage: %s <res> <Re> <tau> <iterations>\n", argv[0]);
-        fprintf(stderr, "Example: %s 10 100 0.9 10000\n", argv[0]);
+        fprintf(stderr, "Usage: %s <res> <Re> <tau> <iterations> <use_IBB>\n", argv[0]);
+        fprintf(stderr, "Example: %s 10 100 0.9 10000 1\n", argv[0]);
         return 1;
     }
 
@@ -21,6 +21,7 @@ int main(int argc, char *argv[]){
     double Reynolds = atof(argv[2]);              // Reynolds number based on U_inf and D = 2R [-]
     double tau = atof(argv[3]);                   // Relaxation time [-]
     int Nt_max = atoi(argv[4]);                   // Maximum number of timesteps [-]
+    int use_IBB = atoi(argv[5]);                  // Use IBB (1: yes, 0: no) [-]
 
     printf("Running simulation with res=%d, Re=%f, tau=%f, for max %d iterations\n", res, Reynolds, tau, Nt_max);
 
@@ -28,6 +29,8 @@ int main(int argc, char *argv[]){
     double R = 1.0;                               // Char length [m]
     double Lx = 50*R;                             // Domain x-size [m]
     double Ly = 20*R;                             // Domain y-size [m]
+    double xc = Lx/4;                             // Center of the cylinder along x axis [m]
+    double yc = Ly/2;                             // Center of the cylinder along y axis [m] 
     double U_inf = 1.0;                           // Inlet axial velocity [m/s]
     double nu = U_inf * (2*R) / Reynolds;         // Kinematic viscosity [m^2/s]
     double dCD_toll = 1e-6;                       // Relative tolerance on CD [-]
@@ -92,15 +95,15 @@ int main(int argc, char *argv[]){
     // Indices of opposite directions for D2Q9 lattice
     int opp[Q] = {0, 3, 4, 1, 2, 7, 8, 5, 6};
 
-    // Solid mask (staircase approximation)
+    // Solid mask (staircase approximation) and signed distance (IBB)
     int (*solid_mask)[Nx] = malloc(Ny * sizeof *solid_mask);
-    //int (*has_wall)[Nx] = malloc(Ny * sizeof *solid_mask);
-    //double (*q)[Nx] = malloc(Ny * sizeof *solid_mask);
+    double (*phi)[Nx] = malloc(Ny * sizeof *phi);
     for (int j = 0; j < Ny; j++){
         double y = j*dx;
         for (int i = 0; i < Nx; i++){
             double x = i*dx;
-            solid_mask[j][i] = ((x - Lx/4)*(x - Lx/4) + (y - Ly/2)*(y - Ly/2)) <= R*R ? 1 : 0;
+            solid_mask[j][i] = ((x - xc)*(x - xc) + (y - yc)*(y - yc)) <= R*R ? 1 : 0;
+            phi[j][i] = sqrt((x - xc)*(x - xc) + (y - yc)*(y - yc)) - R;
         }
     }
 
@@ -165,14 +168,15 @@ int main(int argc, char *argv[]){
     // Temporal loop
     struct Record rec;
     for (int it = 0; it < Nt_max; it++){
+
         // Compute CD
         CD = D*cf/fref;
 
         // Print the timestep
-        if (it % save_iter == 0) printf("Step %d of %d - CD = %.4f - dCD = %g\n",it+1, Nt_max, CD, dCD);
+        if (it % save_iter == 0) printf("Step %d of %d - CD = %.4f - dCD = %g\n ",it+1, Nt_max, CD, dCD);
 
         // Execute the streaming and colliding steps
-        main_lbm(Nx,Ny,Q,f,f_new,rho,u,v,cx,cy,w,opp,omega_eff,solid_mask,boundaries,num_boundaries,isperiodic_x,isperiodic_y,Fx,Fy,&L,&D);
+        main_lbm(Nx,Ny,Q,f,f_new,rho,u,v,cx,cy,w,opp,omega_eff,solid_mask,boundaries,num_boundaries,isperiodic_x,isperiodic_y,Fx,Fy,&L,&D,phi,&use_IBB);
 
         // Write forces
         rec.time = it*dt;
@@ -200,7 +204,11 @@ int main(int argc, char *argv[]){
         } else {
             CD_prec = CD;
         }
+
     }
+
+    // Close forces file
+    fclose(fp);
 
     // Free the memory
     free(solid_mask);

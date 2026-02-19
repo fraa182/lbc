@@ -16,42 +16,55 @@ void compute_force_mem(
     double fx = 0.0;
     double fy = 0.0;
 
-    #pragma omp parallel for reduction(+:fx,fy)
-    for (int j = 0; j < Ny; ++j){
-        for (int i = 0; i < Nx; ++i){
+    #pragma omp parallel 
+    {
 
-            if (solid_mask[j][i]) continue; // fluid nodes only
+        double fx_thread = 0.0;
+        double fy_thread = 0.0;
 
-            for (int k = 1; k < Q; ++k){ // skip k=0 (rest)
-                int in = i + cx[k];
-                int jn = j + cy[k];
+        #pragma omp for 
+        for (int j = 0; j < Ny; ++j){
+            for (int i = 0; i < Nx; ++i){
 
-                // If we're using the periodic BC along x, wrap x
-                if (isperiodic_x) {
-                    if (in < 0) in += Nx;
-                    else if (in >= Nx) in -= Nx;
-                } else {
-                    if (in < 0 || in >= Nx) continue;
-                }
+                if (solid_mask[j][i]) continue; // fluid nodes only
 
-                // If we're using the periodic BC along y, wrap y
-                if (isperiodic_y){
-                    if (jn < 0) jn += Ny;
-                    else if (jn >= Ny) jn -= Ny;
-                } else {
-                    if (jn < 0 || jn >= Ny) continue;
-                }
+                for (int k = 1; k < Q; ++k){ // skip k=0 (rest)
+                    int in = i + cx[k];
+                    int jn = j + cy[k];
 
-                if (solid_mask[jn][in]) {
-                    int ko = opp[k];
+                    // If we're using the periodic BC along x, wrap x
+                    if (isperiodic_x) {
+                        if (in < 0) in += Nx;
+                        else if (in >= Nx) in -= Nx;
+                    } else {
+                        if (in < 0 || in >= Nx) continue;
+                    }
 
-                    // Momentum exchange across the fluid-solid link
-                    double df = f[j][i][k] + f_new[j][i][ko];
-                    fx += df * cx[k];
-                    fy += df * cy[k];
+                    // If we're using the periodic BC along y, wrap y
+                    if (isperiodic_y){
+                        if (jn < 0) jn += Ny;
+                        else if (jn >= Ny) jn -= Ny;
+                    } else {
+                        if (jn < 0 || jn >= Ny) continue;
+                    }
+
+                    if (solid_mask[jn][in]) {
+                        int ko = opp[k];
+
+                        // Momentum exchange across the fluid-solid link
+                        double df = f[j][i][k] + f_new[j][i][ko];
+                        fx_thread += df * cx[k];
+                        fy_thread += df * cy[k];
+                    }
                 }
             }
         }
+
+        #pragma omp atomic
+        fx += fx_thread;
+
+        #pragma omp atomic
+        fy += fy_thread;
     }
 
     *Fx = fx;
