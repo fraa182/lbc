@@ -10,9 +10,9 @@
 int main(int argc, char *argv[]){
 
     // Check if the correct number of arguments is provided
-    if (argc < 5) {
-        fprintf(stderr, "Usage: %s <res> <Re> <tau> <iterations> <use_IBB>\n", argv[0]);
-        fprintf(stderr, "Example: %s 10 100 0.9 10000 1\n", argv[0]);
+    if (argc < 4) {
+        fprintf(stderr, "Usage: %s <res> <Re> <tau> <max_time>\n", argv[0]);
+        fprintf(stderr, "Example: %s 20 100 0.9 10\n", argv[0]);
         return 1;
     }
 
@@ -20,62 +20,50 @@ int main(int argc, char *argv[]){
     int res = atoi(argv[1]);                      // Resolution (voxels per char length) [-]
     double Reynolds = atof(argv[2]);              // Reynolds number based on U_inf and D = 2R [-]
     double tau = atof(argv[3]);                   // Relaxation time [-]
-    int Nt_max = atoi(argv[4]);                   // Maximum number of timesteps [-]
-    int use_IBB = atoi(argv[5]);                  // Use IBB (1: yes, 0: no) [-]
-
-    printf("Running simulation with res=%d, Re=%f, tau=%f, for max %d iterations\n", res, Reynolds, tau, Nt_max);
+    double T_max = atoi(argv[4]);                 // Maximum time [s]
 
     // Physical parameters (physical units)
-    double R = 1.0;                               // Char length [m]
-    double Lx = 50*R;                             // Domain x-size [m]
-    double Ly = 20*R;                             // Domain y-size [m]
-    double xc = Lx/4;                             // Center of the cylinder along x axis [m]
-    double yc = Ly/2;                             // Center of the cylinder along y axis [m] 
+    double L = 1.0;                               // Char length [m]
     double U_inf = 1.0;                           // Inlet axial velocity [m/s]
-    double nu = U_inf * (2*R) / Reynolds;         // Kinematic viscosity [m^2/s]
-    double dCD_toll = 1e-6;                       // Relative tolerance on CD [-]
+    double nu = U_inf * L / Reynolds;             // Kinematic viscosity [m^2/s]
 
     // Lattice domain (lattice units)
-    double dx = R / res;                          // Voxel size [m]
-    int Nx = Lx / dx;                             // Number of voxels along x
-    int Ny = Ly / dx;                             // Number of voxels along y
+    double dx = L / res ;                         // Voxel size [m]                       
+    int Nx = L / dx;                              // Number of voxels along x
+    int Ny = L / dx;                              // Number of voxels along y
     double rho_inf = 1.0;                         // Char lattice density
 
     // Conversion factors (physical to lattice units)
     double crho = rho_inf;                        // Lattice density conversion factor [kg/m^3]
     double cu = 3.0*nu/(dx*(tau - 0.5));          // Lattice velocity conversion factor [m/s]
-    double dt = dx / cu;                          // Time step [s]
-    double cf = (crho*cu*cu*dx);                  // Lattice force conversion factor [N] -> we are in 2D so tehre is just dx!
-    double fref = (0.5*rho_inf*U_inf*U_inf*2*R);  // Reference force to compute CL and CD
+
+    // Max iterations
+    int Nt_max = T_max / (dx/cu);
 
     // Forcing (lattice units)
     double Fx = 0.0;
     double Fy = 0.0;
 
     // Initial conditions (lattice units)
-    double U_in = U_inf / cu;                     // Initial horizontal velocity
+    double U_in = 0.0;                            // Initial horizontal velocity
     double V_in = 0.0;                            // Initial vertical velocity
     double rho_in = rho_inf;                      // Initial density
 
+    printf("Running simulation with res=%d, Re=%f, tau=%f, for max %d iterations (dt = %f s)\n", res, Reynolds, tau, Nt_max, dx/cu);
+
     // Check lattice Mach number
     double cs = 1.0/sqrt(3.0);
-    double Ma = fabs(U_in)/cs;
+    double Ma = fabs(U_inf)/(cu*cs);
     if (Ma > 0.2) fprintf(stderr,"Warning: Lattice Ma too high (%.2f), reduce U_inf or increase res or change tau to stay below 0.20\n", Ma);
 
     // Boundary conditions
-    int num_boundaries = 3;
+    int num_boundaries = 1;
     Boundary boundaries[num_boundaries];
 
-    boundaries[0].apply = periodic_y;
-
-    boundaries[1].index = 0;
-    boundaries[1].val1 = U_in;
-    boundaries[1].val2 = 0.0;
-    boundaries[1].apply = velocity_inlet; 
-
-    boundaries[2].index = Nx - 1;
-    boundaries[2].val1 = rho_inf;
-    boundaries[2].apply = convective_outlet;
+    boundaries[0].index = Ny - 1;
+    boundaries[0].val1 = U_inf / cu;
+    boundaries[0].val2 = 0.0;
+    boundaries[0].apply = velocity_top; 
 
     // Check if there is a periodic BC along x and/or y
     int isperiodic_x = 0;
@@ -95,15 +83,11 @@ int main(int argc, char *argv[]){
     // Indices of opposite directions for D2Q9 lattice
     int opp[Q] = {0, 3, 4, 1, 2, 7, 8, 5, 6};
 
-    // Solid mask (staircase approximation) and signed distance (IBB)
+    // Solid mask
     int (*solid_mask)[Nx] = malloc(Ny * sizeof *solid_mask);
-    double (*phi)[Nx] = malloc(Ny * sizeof *phi);
     for (int j = 0; j < Ny; j++){
-        double y = j*dx;
         for (int i = 0; i < Nx; i++){
-            double x = i*dx;
-            solid_mask[j][i] = ((x - xc)*(x - xc) + (y - yc)*(y - yc)) <= R*R ? 1 : 0;
-            phi[j][i] = sqrt((x - xc)*(x - xc) + (y - yc)*(y - yc)) - R;
+            solid_mask[j][i] = (j == 0) | (i == 0) | (i == Nx - 1) ? 1 : 0;
         }
     }
 
@@ -144,45 +128,21 @@ int main(int argc, char *argv[]){
     }
     memcpy(f_new, f, Ny*sizeof(*f));
 
-    // Define and initialize the lift and drag forces on the cylinder surface (physical units)
-    double L = 0.0;
-    double D = 0.0;
-    double CD = 0.0;
-    double CD_prec = 1.0;
-    double dCD = 1.0;
+    int use_IBB = 0;
+    double FL = 0.0;
+    double FD = 0.0;
+    double (*phi)[Nx] = malloc(Ny * sizeof *phi);
 
     // Ensure that the "sol" directory exists and, if not, create it
     ensure_directory_exists("sol");
 
-    char filename_forces[256];
-    snprintf(filename_forces, sizeof(filename_forces),"sol/forces_%s_res_%d_Re_%.2f_tau_%.2f.bin", use_IBB ? "IBB" : "noIBB", res, Reynolds, tau);
-
-    FILE *fp = fopen(filename_forces, "w");
-
-    struct Record {
-        double time;
-        double L;
-        double D;
-    };
-
-    // Temporal loop
-    struct Record rec;
     for (int it = 0; it < Nt_max; it++){
 
-        // Compute CD
-        CD = D*cf/fref;
-
         // Print the timestep
-        if (it % save_iter == 0) printf("Step %d of %d - CD = %.4f - dCD = %g\n ",it+1, Nt_max, CD, dCD);
+        if (it % save_iter == 0) printf("Step %d of %d\n ",it+1, Nt_max);
 
         // Execute the streaming and colliding steps
-        main_lbm(Nx,Ny,Q,f,f_new,rho,u,v,cx,cy,w,opp,omega_eff,solid_mask,boundaries,num_boundaries,isperiodic_x,isperiodic_y,Fx,Fy,&L,&D,phi,use_IBB);
-
-        // Write forces
-        rec.time = it*dt;
-        rec.L = L*cf;
-        rec.D = D*cf;
-        fwrite(&rec, sizeof(struct Record), 1, fp);
+        main_lbm(Nx,Ny,Q,f,f_new,rho,u,v,cx,cy,w,opp,omega_eff,solid_mask,boundaries,num_boundaries,isperiodic_x,isperiodic_y,Fx,Fy,&FL,&FD,phi,use_IBB);
 
         // Swap f and f_new
         double (*temp_ptr)[Nx][Q] = f;
@@ -192,23 +152,11 @@ int main(int argc, char *argv[]){
         // Write solution (rho, u, v) on a ".vtk" file each save_iter iterations
         if (it % save_iter == 0){
             char filename[256];
-            snprintf(filename, sizeof(filename),"sol/fields_%s_res_%d_Re_%f_tau_%f_%05d.vtk", use_IBB ? "IBB" : "noIBB", res, Reynolds, tau, it);
+            snprintf(filename, sizeof(filename),"sol/fields_res_%d_Re_%f_tau_%f_%05d.vtk", res, Reynolds, tau, it);
             write_vtk_binary_2D(filename,Nx,Ny,dx,u,v,rho,cu,crho);
-
-            // Check convergence on CD
-            dCD = fabs(CD - CD_prec);
-            if (dCD <= dCD_toll) {
-                printf("Stopping at iteration %d (dCD=%g)\n", it, dCD);
-                break;
-            } else {
-                CD_prec = CD;
-            }
         }
 
     }
-
-    // Close forces file
-    fclose(fp);
 
     // Free the memory
     free(solid_mask);

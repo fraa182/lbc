@@ -17,6 +17,7 @@ void convective_top(
 ) {
     int j_top = index;
 
+    #pragma omp parallel for
     for (int i = 0; i < Nx; i++) {
 
         if (solid_mask[j_top][i]) continue;
