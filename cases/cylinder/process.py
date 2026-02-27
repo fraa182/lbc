@@ -58,7 +58,7 @@ Re_vec = np.array([20, 100])
 tau_vec = np.array([0.85, 0.57])
 IBB_str = "IBB"
 
-T_conv_proc = 50
+T_conv_proc = 20
 T_conv_proc_pf = 5
 CD_mean_exp = 1.18 + 6.8/Re_vec**0.89 + 1.96/Re_vec**0.5 - 0.0004*Re_vec/(1 + 3.64e-7*Re_vec**2)
 
@@ -126,96 +126,108 @@ for j in range(len(Re_vec)):
             CD_std[i] = np.std(CD-CD_mean[i])
 
             CL_mean_pf[i] = np.mean(CL_pf)
-            CL_std_pf[i] = np.std(CL_pf-CL_mean_pf[i])
+            CL_std_pf[i] = np.std(CL_pf)
 
             CD_mean_pf[i] = np.mean(CD_pf)
-            CD_std_pf[i] = np.std(CD_pf-CD_mean_pf[i])
+            CD_std_pf[i] = np.std(CD_pf)
 
-            # Compute FFT of CL
-            f, A = compute_fft(CL, dt)
-            f_pf, A_pf = compute_fft(CL_pf, dt_pf)
+            if (Re == Re_shed):
+                # Compute FFT of CL
+                f, A = compute_fft(CL, dt)
+                f_pf, A_pf = compute_fft(CL_pf, dt_pf)
 
-            # Find shedding frequency (max of CL FFT)
-            idx = np.argmax(A)
-            f_shed = f[idx]
+                # Find shedding frequency (max of CL FFT)
+                idx = np.argmax(A)
+                f_shed = f[idx]
 
-            idx_pf = np.argmax(A_pf)
-            f_shed_pf = f[idx_pf]
+                idx_pf = np.argmax(A_pf)
+                f_shed_pf = f[idx_pf]
 
-            # Convert frequency in Strouhal number (St)
-            St = f * 2*R / U_inf
-            St_shed[i] = f_shed * 2*R / U_inf
+                # Convert frequency in Strouhal number (St)
+                St = f * 2*R / U_inf
+                St_shed[i] = f_shed * 2*R / U_inf
 
-            St_pf = f_pf * 2*R / U_inf
-            St_shed[i] = f_shed_pf * 2*R / U_inf
+                St_pf = f_pf * 2*R / U_inf
+                St_shed_pf[i] = f_shed_pf * 2*R / U_inf
 
             if plotTimeHistoryFlag:
                 # Plot CL and CD time history
                 plt.figure()
                 plt.subplot(211)
                 plt.plot(t*U_inf/(2*R), CL, 'b')
-                plt.plot(t_pf*U_inf/(2*R), CL_pf, 'r')
+                plt.axhline(y=0, color='r', linestyle='--')
+                #plt.plot(t_pf*U_inf/(2*R), CL_pf, 'r')
                 plt.ylabel("$c_l$ [-]")
                 plt.suptitle(f"Re = {Re:^.2f} - Res = {res}")
 
                 plt.subplot(212)
                 plt.plot(t*U_inf/(2*R), CD, 'b')
-                plt.plot(t_pf*U_inf/(2*R), CD_pf, 'r')
+                #plt.plot(t_pf*U_inf/(2*R), CD_pf, 'r')
+                plt.axhline(y=CD_mean_exp[j], color='r', linestyle='--')
                 plt.ylabel("$c_d$ [-]")
                 plt.xlabel("$tU_\\infty /D$ [-]")
-                plt.figlegend(['LBC','PowerFLOW'], loc='upper center', ncol=2, bbox_to_anchor=(0.5, 0.95))
+                #plt.figlegend(['LBC','PowerFLOW'], loc='upper center', ncol=2, bbox_to_anchor=(0.5, 0.95))
                 plt.tight_layout()
+                plt.savefig(f"plots/time_history_Re{Re}_res{res}.png", dpi=300, bbox_inches='tight')
 
                 # # Plot CL FFT vs St
                 if (Re == Re_shed):
                     plt.figure()
-                    plt.semilogx(St, A, 'b')
-                    plt.semilogx(St_pf, A_pf, '--r')
-                    plt.axvline(x=St_shed[i], color='k', linestyle=':')
+                    plt.semilogx(St, A, '-ob')
+                    #plt.semilogx(St_pf, A_pf, '--r')
                     plt.xlabel("$St$ [-]")
                     plt.ylabel("$\\tilde{c_l}$ [-]")
-                    plt.title(f"St shedding = {St_shed[i]:^.2f} - Re = {Re:^.2f} - Res = {res}")
+                    plt.title(f"Res = {res}")
                     plt.tight_layout()
-        except:
-            continue
+                    plt.savefig(f"plots/fft_CL_Re{Re}_res{res}.png", dpi=300, bbox_inches='tight')
+        except Exception:
+            raise Exception
 
     plt.figure()
     
     plt.subplot(221)
     plt.plot(res_vec,CL_mean,'-ob')
-    plt.plot(res_vec,CL_mean_pf,'--sr')
-    plt.title("$\\bar{C_L}$")
+    plt.axhline(y=0, color='r', linestyle='--')
+    #plt.plot(res_vec,CL_mean_pf,'--sr')
+    plt.title("$\\bar{C_L}$ [-]")
 
     plt.subplot(222)
     plt.plot(res_vec,CL_std,'-db')
-    plt.plot(res_vec,CL_std_pf,'--vr')
-    plt.title("${C_L}_\\sigma$")
+    if (Re == Re_shed):
+        plt.axhline(y=0.4, color='r', linestyle='--')
+    else:
+        plt.axhline(y=0, color='r', linestyle='--')
+    #plt.plot(res_vec,CL_std_pf,'--vr')
+    plt.title("${C_L}_\\sigma$ [-]")
 
     plt.subplot(223)
     plt.plot(res_vec,CD_mean,'-ob')
-    plt.plot(res_vec,CD_mean_pf,'--sr')
-    plt.axhline(y=CD_mean_exp[j], color='k', linestyle=':')
-    plt.title("$\\bar{C_D}$")
+    #plt.plot(res_vec,CD_mean_pf,'--sr')
+    plt.axhline(y=CD_mean_exp[j], color='r', linestyle='--')
+    plt.title("$\\bar{C_D}$ [-]")
     plt.xlabel("Res [-]")
 
     plt.subplot(224)
     plt.plot(res_vec,CD_std,'-db')
-    plt.plot(res_vec,CD_std_pf,'--vr')
-    plt.title("${C_D}_\\sigma$")
+    #plt.plot(res_vec,CD_std_pf,'--vr')
+    plt.axhline(y=0, color='r', linestyle='--')
+    plt.title("${C_D}_\\sigma$ [-]")
     plt.xlabel("Res [-]")
-    plt.suptitle(f"Re = {Re:^.2f}")
-    plt.figlegend(['LBC','PowerFLOW'], loc='upper center', ncol=2, bbox_to_anchor=(0.5, 0.95))
-
+    plt.suptitle(f"Re = {Re}")
+    #plt.figlegend(['LBC','PowerFLOW'], loc='upper center', ncol=2, bbox_to_anchor=(0.5, 0.95))
     plt.tight_layout()
+    plt.savefig(f"plots/grid_convergence_Re{Re}.png", dpi=300, bbox_inches='tight')
 
-if Re_shed in Re_vec:
-    plt.figure()
-    plt.plot(res_vec,St_shed,'-pb')
-    plt.plot(res_vec,St_shed_pf,'--xr')
-    plt.axhline(y=0.21, color='k', linestyle=':')
-    plt.xlabel("Res [-]")
-    plt.ylabel("$St_{shed}$ [-]")
-    plt.title(f"Re = {Re}")
-    plt.tight_layout()
+    if (Re == Re_shed):
+        plt.figure()
+        plt.plot(res_vec,St_shed,'-pb')
+        #plt.plot(res_vec,St_shed_pf,'--xr')
+        plt.axhline(y=0.21, color='r', linestyle='--')
+        plt.ylim(0.17,0.23)
+        plt.xlabel("Res [-]")
+        plt.ylabel("$St_{shed}$ [-]")
+        plt.title(f"Re = {Re}")
+        plt.tight_layout()
+        plt.savefig(f"plots/shedding_Re{Re}.png", dpi=300, bbox_inches='tight')
 
 plt.show()
