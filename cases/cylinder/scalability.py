@@ -27,8 +27,8 @@ plt.rcParams['legend.frameon'] = False
 plt.rcParams['figure.figsize'] = (10, 8)
 
 data_sapphire = pd.read_csv('/run/user/1000/gvfs/sftp:host=hpc-legionlogin.polito.it,user=fbellelli/mnt/beegfs/fbellelli/lbc/cases/cylinder/benchmark_results_sapphire.csv')
-data_skylake = pd.read_csv('/run/user/1000/gvfs/sftp:host=hpc-legionlogin.polito.it,user=fbellelli/mnt/beegfs/fbellelli/lbc/cases/cylinder/scalability_cpu_skylake/benchmark_results.csv')
-data_oldsave_skylake = pd.read_csv('/run/user/1000/gvfs/sftp:host=hpc-legionlogin.polito.it,user=fbellelli/mnt/beegfs/fbellelli/lbc/cases/cylinder/scalability_cpu_skylake/benchmark_results_oldsave.csv')
+#data_skylake = pd.read_csv('/run/user/1000/gvfs/sftp:host=hpc-legionlogin.polito.it,user=fbellelli/mnt/beegfs/fbellelli/lbc/cases/cylinder/scalability_cpu_skylake/benchmark_results.csv')
+#data_oldsave_skylake = pd.read_csv('/run/user/1000/gvfs/sftp:host=hpc-legionlogin.polito.it,user=fbellelli/mnt/beegfs/fbellelli/lbc/cases/cylinder/scalability_cpu_skylake/benchmark_results_oldsave.csv')
 data_nosave_skylake = pd.read_csv('/run/user/1000/gvfs/sftp:host=hpc-legionlogin.polito.it,user=fbellelli/mnt/beegfs/fbellelli/lbc/cases/cylinder/scalability_cpu_skylake/benchmark_results_nosave.csv')
 
 plt.figure()

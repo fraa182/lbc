@@ -91,4 +91,26 @@ void compute_force_mem(
     double *Fy
 );
 
+void mei_initialization(
+    int Nx,
+    int Ny, 
+    int Q,
+    double (**pf)[Nx][Q], 
+    double (**pf_new)[Nx][Q], 
+    double rho_inf,
+    double U_in[Ny][Nx], 
+    double V_in[Ny][Nx],
+    double rho[Ny][Nx], 
+    double u[Ny][Nx], 
+    double v[Ny][Nx], 
+    int cx[], 
+    int cy[], 
+    double w[], 
+    double omega_eff[Ny][Nx], 
+    int isperiodic_x,
+    int isperiodic_y,
+    int init_iter_max,
+    double tol_rho
+);
+
 #endif

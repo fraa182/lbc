@@ -46,13 +46,15 @@ void main_lbm(
     streaming(Nx,Ny,Q,f,f_new,solid_mask,cx,cy,isperiodic_x,isperiodic_y);
 
     // Boundary conditions
-    for (int i = 0; i < num_boundaries; i++) {
-        boundaries[i].apply(
-            Nx, Ny, Q, 
-            boundaries[i].index, 
-            boundaries[i].val1, boundaries[i].val2,
-            f, f_new, rho, u, v, solid_mask, cx, cy, w
-        );
+    if (num_boundaries > 0) {
+        for (int i = 0; i < num_boundaries; i++) {
+            boundaries[i].apply(
+                Nx, Ny, Q, 
+                boundaries[i].index, 
+                boundaries[i].val1, boundaries[i].val2,
+                f, f_new, rho, u, v, solid_mask, cx, cy, w
+            );
+        }
     }
     
     // Compute macroscopic quantities
