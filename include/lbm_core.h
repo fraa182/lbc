@@ -113,4 +113,18 @@ void mei_initialization(
     double tol_rho
 );
 
+void sponge_layer(
+    int Nx,
+    int Ny,
+    double dx,
+    double xc,
+    double yc,
+    double r_inner,
+    double r_outer,
+    double tau_base,
+    double incr_tau,
+    double exp_coeff,
+    double omega_eff[Ny][Nx]
+);
+
 #endif
