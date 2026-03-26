@@ -11,22 +11,22 @@ int main(int argc, char *argv[]){
 
     // Check if the correct number of arguments is provided
     if (argc < 4) {
-        fprintf(stderr, "Usage: %s <tau> <# decay times> <initialization iterations>\n", argv[0]);
+        fprintf(stderr, "Usage: %s <tau> <number of Fourier modes> <density amplitude>\n", argv[0]);
         return 1;
     }
 
     // UI quantities
     double tau = atof(argv[1]);                   // Relaxation time [-]
-    int Nt = atoi(argv[2]);                       // Number of time steps to be simulated [-]
-    int init_iter_max = atoi(argv[3]);            // Number of iterations for initialization [-]
-    double kx = atoi(argv[4]);                    // Wavenumber along x [1/m]
+    int m = atoi(argv[2]);                        // Number of Fourier modes [-]
+    double A = atof(argv[3]);                     // Density amplitude [kg/m^3]
 
-    printf("Running simulation with tau = %.2f, Nt = %d, init_iter_max = %d, kx = %g\n", tau, Nt, init_iter_max, kx);
+    printf("Running simulation with tau = %.2f, m = %d\n", tau, m);
 
-    // Computational domain (lattice units)
+    // Computational domain
     int Nx = 100;                                 // Number of points along x [-]
-    int Ny = 10;                                  // Number of points along y [-]
-    
+    int Ny = 2;                                   // Number of points along y [-]
+    int Nt = ceil(0.223/(tau-0.5)*(Nx/m)*(Nx/m)); // Number of time steps [-]
+
     // Conversion factors (physical to lattice units)
     double dx = 1.0;                              // Voxel size [m]
     double crho = 1.0;                            // Lattice density conversion factor [kg/m^3]
@@ -37,17 +37,11 @@ int main(int argc, char *argv[]){
     double Fy = 0.0;
 
     // Initial conditions (lattice units)
-    double tol_rho = 1e-10;                       // Tolerance for density convergence [-]
-    double (*U_in)[Nx] = malloc(Ny * sizeof *U_in);
-    double (*V_in)[Nx] = malloc(Ny * sizeof *V_in);
-    double (*rho_in)[Nx] = malloc(Ny * sizeof *rho_in);
-    for (int j = 0; j < Ny; j++){
-        for (int i = 0; i < Nx; i++){ 
-            rho_in[j][i] = 1.0 + 2e-3*cos(2*M_PI * (i*dx) / kx);
-            U_in[j][i] = 1/sqrt(3) * 2e-3*cos(2*M_PI * (i*dx) / kx);
-            V_in[j][i] = 0.0;
-        }
-    }
+    double rho_0 = 1.0;                           // Initial uniform density at rest [kg/m^3]
+    double tol_rho = 1e-10;                       // Tolerance for density convergence in Mei's algorithm [-]
+    int init_iter_max = 100;                      // Maximum number of iterations in Mei's algorithm [-]
+    double kx = m / (Nx * dx);                    // Wavenumber along x [1/m]
+    double cs = 1.0/sqrt(3.0);                    // Speed of sound [m/s]
 
     // Boundary conditions
     int use_IBB = 0;                              // Use IBB (1: yes, 0: no) [-]
@@ -95,11 +89,28 @@ int main(int argc, char *argv[]){
     }
 
     // Flow field and particle distribution function initialization
+    double (*U_in)[Nx] = malloc(Ny * sizeof *U_in);
+    double (*V_in)[Nx] = malloc(Ny * sizeof *V_in);
+    double (*rho_in)[Nx] = malloc(Ny * sizeof *rho_in);
+    
     double (*rho)[Nx] = malloc(Ny * sizeof *rho);
     double (*u)[Nx] = malloc(Ny * sizeof *u);
     double (*v)[Nx] = malloc(Ny * sizeof *v);
+
     double (*f)[Nx][Q] = malloc(Ny * sizeof *f);
     double (*f_new)[Nx][Q] = malloc(Ny * sizeof *f_new);
+
+    for (int j = 0; j < Ny; j++){
+        for (int i = 0; i < Nx; i++){ 
+            double x = i * dx;
+
+            double rho_p = A * cos(2*M_PI * x * kx);
+            rho_in[j][i] = rho_0 + rho_p;
+
+            U_in[j][i] = cs * rho_p/ rho_0;
+            V_in[j][i] = 0.0;
+        }
+    }
     mei_initialization(Nx, Ny, Q, &f, &f_new, rho_in, U_in, V_in, rho, u, v, cx, cy, w, omega_eff, isperiodic_x, isperiodic_y, init_iter_max, tol_rho);
 
     // Define and initialize the lift and drag forces on the surface (physical units)
@@ -125,7 +136,7 @@ int main(int argc, char *argv[]){
         // Write solution (rho, u, v) on a ".vtk" file each save_iter iterations
         if (it % save_iter == 0){
             char filename[256];
-            snprintf(filename, sizeof(filename),"sol/fields_tau_%f_%05d.vtk", tau, it);
+            snprintf(filename, sizeof(filename),"sol/fields_tau_%f_m_%d_A_%f_%05d.vtk", tau, m, A, it);
             write_vtk_binary_2D(filename,Nx,Ny,dx,u,v,rho,cu,crho);
         }
 
