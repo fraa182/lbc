@@ -26,8 +26,8 @@ void velocity_inlet(
 
         double f0 = f_new[j][i_in][0];
         double f2 = f_new[j][i_in][2];
-        double f4 = f_new[j][i_in][4];
         double f3 = f_new[j][i_in][3];
+        double f4 = f_new[j][i_in][4];
         double f6 = f_new[j][i_in][6];
         double f7 = f_new[j][i_in][7];
 

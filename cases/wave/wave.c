@@ -17,43 +17,35 @@ int main(int argc, char *argv[]){
 
     // UI quantities
     double tau = atof(argv[1]);                   // Relaxation time [-]
-    int Td_sim = atoi(argv[2]);                   // Number of decay times to be simulated [-]
+    int Nt = atoi(argv[2]);                       // Number of time steps to be simulated [-]
     int init_iter_max = atoi(argv[3]);            // Number of iterations for initialization [-]
+    double kx = atoi(argv[4]);                    // Wavenumber along x [1/m]
 
-    printf("Running simulation with tau = %.2f, Td_sim = %d, init_iter_max = %d\n", tau, Td_sim, init_iter_max);
+    printf("Running simulation with tau = %.2f, Nt = %d, init_iter_max = %d, kx = %g\n", tau, Nt, init_iter_max, kx);
 
     // Computational domain (lattice units)
-    int Nx = 96;                                  // Number of points along x [-]
-    int Ny = 72;                                  // Number of points along y [-]
-    double U_inf = 0.03;                          // Initial velocity [m/s]
-    double rho_inf = 1.0;                         // Initial density [kg/m^3]
-    double nu = (tau - 0.5) / 3;                  // Kinematic viscosity [m^2/s]
+    int Nx = 100;                                 // Number of points along x [-]
+    int Ny = 10;                                  // Number of points along y [-]
     
     // Conversion factors (physical to lattice units)
     double dx = 1.0;                              // Voxel size [m]
     double crho = 1.0;                            // Lattice density conversion factor [kg/m^3]
     double cu = 1.0;                              // Lattice velocity conversion factor [m/s]
 
-    // Calculation of simulation time
-    double kx = 2*M_PI / (Nx);                    // Wavenumber along x [1/m]
-    double ky = 2*M_PI / (Ny);                    // Wavenumber along y [1/m]
-    double decay_time = 1 / (nu*(kx*kx + ky*ky)); // Decay time [s]
-    int Nt = (Td_sim*decay_time);                 // Number of time steps [-]
-
     // Forcing (lattice units)
     double Fx = 0.0;
     double Fy = 0.0;
 
     // Initial conditions (lattice units)
-    double tol_rho = 1e-16;                       // Tolerance for density convergence [-]
+    double tol_rho = 1e-10;                       // Tolerance for density convergence [-]
     double (*U_in)[Nx] = malloc(Ny * sizeof *U_in);
     double (*V_in)[Nx] = malloc(Ny * sizeof *V_in);
     double (*rho_in)[Nx] = malloc(Ny * sizeof *rho_in);
     for (int j = 0; j < Ny; j++){
         for (int i = 0; i < Nx; i++){ 
-            U_in[j][i] = -U_inf / cu * sqrt(ky/kx)*cos(kx*i*dx)*sin(ky*j*dx);
-            V_in[j][i] = U_inf / cu * sqrt(kx/ky)*sin(kx*i*dx)*cos(ky*j*dx);
-            rho_in[j][i] = rho_inf;
+            rho_in[j][i] = 1.0 + 2e-3*cos(2*M_PI * (i*dx) / kx);
+            U_in[j][i] = 1/sqrt(3) * 2e-3*cos(2*M_PI * (i*dx) / kx);
+            V_in[j][i] = 0.0;
         }
     }
 

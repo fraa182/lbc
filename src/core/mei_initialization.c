@@ -9,7 +9,7 @@ void mei_initialization(
     int Q,
     double (**pf)[Nx][Q], 
     double (**pf_new)[Nx][Q], 
-    double rho_inf,
+    double rho_in[Ny][Nx],
     double U_in[Ny][Nx], 
     double V_in[Ny][Nx],
     double rho[Ny][Nx], 
@@ -32,9 +32,18 @@ void mei_initialization(
         for (int i = 0; i < Nx; i++){
             u[j][i] = U_in[j][i];
             v[j][i] = V_in[j][i];
-            rho[j][i] = rho_inf;
+            rho[j][i] = rho_in[j][i];
         }
     }
+
+    // Compute mean density for incompressible equilibrium population
+    double rho_0 = 0.0;
+    for (int j = 0; j < Ny; j++){
+        for (int i = 0; i < Nx; i++){
+            rho_0 += rho[j][i];
+        }
+    }
+    rho_0 /= (Nx * Ny);
 
     // Define local pointers of f and f_new
     double (*f)[Nx][Q] = *pf;
@@ -49,7 +58,7 @@ void mei_initialization(
 
             for (int k = 0; k < Q; k++){
                 double cu  = cx[k]*ux + cy[k]*uy;
-                f[j][i][k] = w[k]*rho[j][i] + w[k]*rho_inf*(3.0*cu + 4.5*cu*cu - 1.5*v_sq);;
+                f[j][i][k] = w[k]*rho[j][i] + w[k]*rho_0*(3.0*cu + 4.5*cu*cu - 1.5*v_sq);
             }
         }
     }
@@ -92,7 +101,7 @@ void mei_initialization(
 
                 for (int k = 0; k < Q; k++) {
                     double cu  = cx[k]*ux + cy[k]*uy;
-                    double feq = w[k]*rho[j][i] + w[k]*rho_inf*(3.0*cu + 4.5*cu*cu - 1.5*v_sq);
+                    double feq = w[k]*rho[j][i] + w[k]*rho_0*(3.0*cu + 4.5*cu*cu - 1.5*v_sq);
 
                     f[j][i][k] += -omega_eff[j][i] * (f[j][i][k] - feq);
                 }

@@ -97,7 +97,7 @@ void mei_initialization(
     int Q,
     double (**pf)[Nx][Q], 
     double (**pf_new)[Nx][Q], 
-    double rho_inf,
+    double rho_in[Ny][Nx],
     double U_in[Ny][Nx], 
     double V_in[Ny][Nx],
     double rho[Ny][Nx], 
