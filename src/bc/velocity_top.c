@@ -34,11 +34,7 @@ void velocity_top(
         double rho_top = (f0 + f1 + f3 + 2*(f2 + f5 + f6))/(1 + V_top);
 
         f_new[j_top][i][4] = f2 - 2.0/3.0*rho_top*V_top;
-        f_new[j_top][i][7] = f5 + (f1 - f3)/2.0 - 0.5*rho_top*U_top - 1/6.0*rho_top*V_top;
-        f_new[j_top][i][8] = f6 - (f1 - f3)/2.0 + 0.5*rho_top*U_top - 1/6.0*rho_top*V_top;
-
-        rho[j_top][i] = rho_top;
-        u[j_top][i]   = U_top;
-        v[j_top][i]   = V_top;
+        f_new[j_top][i][7] = f5 + (f1 - f3)/2.0 - 0.5*rho_top*U_top - 1.0/6.0*rho_top*V_top;
+        f_new[j_top][i][8] = f6 - (f1 - f3)/2.0 + 0.5*rho_top*U_top - 1.0/6.0*rho_top*V_top;
     }
 }

@@ -2,13 +2,14 @@
 #include <stdlib.h>
 #include <math.h>
 #include <string.h>
+#include "lbm.h"
 
 void mei_initialization(
     int Nx,
     int Ny, 
     int Q,
-    double (**pf)[Nx][Q], 
-    double (**pf_new)[Nx][Q], 
+    double f[Ny][Nx][Q], 
+    double f_new[Ny][Nx][Q], 
     double rho_in[Ny][Nx],
     double U_in[Ny][Nx], 
     double V_in[Ny][Nx],
@@ -22,7 +23,8 @@ void mei_initialization(
     int isperiodic_x,
     int isperiodic_y,
     int init_iter_max,
-    double tol_rho
+    double tol_rho,
+    int solid_mask[Ny][Nx]
 ){
 
     printf("Initialization of the populations... ");
@@ -45,11 +47,8 @@ void mei_initialization(
     }
     rho_0 /= (Nx * Ny);
 
-    // Define local pointers of f and f_new
-    double (*f)[Nx][Q] = *pf;
-    double (*f_new)[Nx][Q] = *pf_new;
-
     // Initialize particle distribution function (incompressible equilibrium)
+    #pragma omp parallel for
     for (int j = 0; j < Ny; j++){
         for (int i = 0; i < Nx; i++){
             double ux = u[j][i];
@@ -109,33 +108,7 @@ void mei_initialization(
         }
 
         // Perform streaming
-        #pragma omp parallel for
-        for (int i = 0; i < Nx; i++) {
-            for (int j = 0; j < Ny; j++) {
-
-                for (int k = 0; k < Q; k++) {
-                    int i_src = i - cx[k];
-                    int j_src = j - cy[k];
-
-                    // If we're using the periodic BC along x, wrap x
-                    if (isperiodic_x){
-                        if (i_src < 0) i_src += Nx;
-                        else if (i_src >= Nx) i_src -= Nx;
-                    }
-
-                    // If we're using the periodic BC along y, wrap y
-                    if (isperiodic_y){
-                        if (j_src < 0) j_src += Ny;
-                        else if (j_src >= Ny) j_src -= Ny;
-                    }
-
-                    // If non-periodic and out of bounds: leave it for BCs to set later
-                    if (i_src < 0 || i_src >= Nx || j_src < 0 || j_src >= Ny) continue;
-
-                    f_new[j][i][k] = f[j_src][i_src][k];
-                }
-            }
-        }
+        streaming(Nx,Ny,Q,f,f_new,solid_mask,cx,cy,isperiodic_x,isperiodic_y);
 
         // Swap f and f_new
         double (*temp_ptr)[Nx][Q] = f;
@@ -167,9 +140,4 @@ void mei_initialization(
 
     // Free the memory
     free(rho_prev);
-
-    // Write back the final pointers to caller
-    *pf = f;
-    *pf_new = f_new;
-
 }

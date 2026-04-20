@@ -34,11 +34,7 @@ void velocity_inlet(
         double rho_in = (f0 + f2 + f4 + 2.0*(f3 + f6 + f7)) / (1.0 - U_in);
 
         f_new[j][i_in][1] = f3 + (2.0/3.0)*rho_in*U_in;
-        f_new[j][i_in][5] = f7 + (1.0/6.0)*rho_in*U_in - 0.5*(f2 - f4);
-        f_new[j][i_in][8] = f6 + (1.0/6.0)*rho_in*U_in + 0.5*(f2 - f4);
-
-        rho[j][i_in] = rho_in;
-        u[j][i_in]   = U_in;
-        v[j][i_in]   = V_in;
+        f_new[j][i_in][5] = f7 + (1.0/6.0)*rho_in*U_in - 0.5*(f2 - f4) + (1.0/2.0)*rho_in*V_in;
+        f_new[j][i_in][8] = f6 + (1.0/6.0)*rho_in*U_in + 0.5*(f2 - f4) - (1.0/2.0)*rho_in*V_in;
     }
 }

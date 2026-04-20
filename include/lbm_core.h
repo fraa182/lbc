@@ -95,8 +95,8 @@ void mei_initialization(
     int Nx,
     int Ny, 
     int Q,
-    double (**pf)[Nx][Q], 
-    double (**pf_new)[Nx][Q], 
+    double f[Ny][Nx][Q], 
+    double f_new[Ny][Nx][Q], 
     double rho_in[Ny][Nx],
     double U_in[Ny][Nx], 
     double V_in[Ny][Nx],
@@ -110,7 +110,8 @@ void mei_initialization(
     int isperiodic_x,
     int isperiodic_y,
     int init_iter_max,
-    double tol_rho
+    double tol_rho,
+    int solid_mask[Ny][Nx]
 );
 
 void sponge_layer(

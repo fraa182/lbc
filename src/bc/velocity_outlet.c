@@ -36,9 +36,5 @@ void velocity_outlet(
         f_new[j][i_out][3] = f1 - (2.0/3.0)*rho_out*U_out;
         f_new[j][i_out][6] = f8 - 0.5*(f2 - f4) - (1.0/6.0)*rho_out*U_out + (1.0/2.0)*rho_out*V_out;
         f_new[j][i_out][7] = f5 + 0.5*(f2 - f4) - (1.0/6.0)*rho_out*U_out - (1.0/2.0)*rho_out*V_out;
-
-        rho[j][i_out] = rho_out;
-        u[j][i_out]   = U_out;
-        v[j][i_out]   = V_out;
     }
 }
