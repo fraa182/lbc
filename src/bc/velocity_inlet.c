@@ -3,8 +3,8 @@ void velocity_inlet(
     int Ny,
     int Q, 
     int index,
-    double val1,
-    double val2,
+    const double *val1, 
+    const double *val2,
     double f[Ny][Nx][Q],
     double f_new[Ny][Nx][Q], 
     double rho[Ny][Nx], 
@@ -15,14 +15,15 @@ void velocity_inlet(
     int cy[],
     double w[]
 ) {
-    double U_in = val1;
-    double V_in = val2;
     int i_in = index;
     
     #pragma omp parallel for
     for (int j = 0; j < Ny; j++) {
 
         if (solid_mask[j][i_in]) continue;
+
+        double U_in = val1[j];
+        double V_in = val2[j];
 
         double f0 = f_new[j][i_in][0];
         double f2 = f_new[j][i_in][2];

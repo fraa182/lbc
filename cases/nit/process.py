@@ -59,7 +59,7 @@ plt.rcParams['axes.prop_cycle'] = cycler(color=cols, linestyle=['-', '--', '-.',
 #                                           CALCULATIONS                                                      #
 # ----------------------------------------------------------------------------------------------------------- #
 
-def read_probe(f_exc, p_a, x_target):
+def read_probe(f_exc, p_a, x_target, foldername='/media/fra/Volume/liner_test/02_tdibc_validation_NIT/uniform'):
 
     dx = 3 * nu * cs / (c0 * (tau - 0.5))
     dt = dx**2 * (tau - 0.5) / (3 * nu)
@@ -71,7 +71,7 @@ def read_probe(f_exc, p_a, x_target):
 
     for it in range(0, 630000, save_iter):
         try:
-            mesh = pv.read(f'/media/fra/Volume/liner_test/sol_new2/sol/fields_{f_exc}Hz_{p_a}Pa_{it:05d}.vtk')
+            mesh = pv.read(f'{foldername}/fields_{f_exc}Hz_{p_a}Pa_{it:05d}.vtk')
 
             dx = mesh.spacing[0]
             Lx = mesh.dimensions[0]
@@ -92,83 +92,170 @@ def read_probe(f_exc, p_a, x_target):
     return t, np.array(p), np.array(u), np.array(rho)
 
 
-def write_file_probe(t, p, u, rho, x, i):
+def read_tdibc(foldername,f_exc, p_a, start_cycles=1, ac_cycles=10):
 
-    # Sample data: A list of lists or tuples containing your numerical values
-    p += 101325*np.ones_like(p)
-    data = np.column_stack((t, p, u, rho))
+    # Read simulated TDIBC data
+    data = np.genfromtxt(f'{foldername}/tdibc_{f_exc}Hz_{p_a}Pa.txt', invalid_raise=False)
+    t = data[:, 0]
+    p = data[:, 1]
+    v = data[:, 2]
 
-    file_path = f'probe_{i}.txt'
+    # Interpolate on uniform time grid
+    f_p = interp1d(t, p)
+    f_v = interp1d(t, v)
 
-    with open(file_path, "w") as f:
-        # 1. Write the metadata headers
-        f.write("# Time history output for all variables, bands and points\n")
-        f.write(f"# Number of frames = {len(data)}\n")
-        f.write("# Number of variables = 3\n")
-        f.write("# Number of bands = 1\n")
-        f.write("# Number of points = 1\n")
-        f.write("# Description of columns: \n")
-        f.write("# Column, Point_#, (X (m),Y (m),Z (m)), Variable_#, Variable name, Band_#, Freq_range\n")
-        f.write("# 1, time(sec)\n")
-        f.write(f"# 2, 0, ({x},7.87443e-05,7.87443e-05), 0, ExtractSignal Pressure, 0, Single frequency band\n")
-        f.write(f"# 3, 0, ({x},7.87443e-05,7.87443e-05), 1, ExtractSignal X-Velocity, 0, Single frequency band\n")
-        f.write(f"# 4, 0, ({x},7.87443e-05,7.87443e-05), 2, ExtractSignal Density, 0, Single frequency band\n")
+    t = np.linspace(t[0], t[-1], len(t))
+    p = f_p(t)
+    v = f_v(t)
 
-        # 2. Write the numerical data
-        for row in data:
-            # Convert each number to a string and join with a space
-            line = " ".join(map(str, row))
-            f.write(line + "\n")
+    # Remove the starting acoustic cycles
+    mask = (t*f_exc >= start_cycles) & (t*f_exc <= start_cycles + ac_cycles)
 
-    return
+    t = t[mask]
+    t -= t[0]
 
+    p = p[mask]
+    v = v[mask]
+    
+    # Flip the sign except for 1000 Hz to match reference data phase (different initialization)
+    if f_exc != 1000:
+        p = -p
+        v = -v
 
-def read_impedance_optydb(SPL):
-    # Define the array of frequencies that have been simulated
-    f = np.array([800, 1000, 1400, 2000])
+    p -= np.mean(p)
+    v -= np.mean(v)
 
-    # Initialize resistance (R) and reactance (X)
-    R = np.zeros(len(f))
-    X = np.zeros(len(f))
-
-    # Read R and X at each probe
-    for j in range(len(f)):
-        for i in range(1,12):
-            data = np.genfromtxt(f'/run/user/1000/gvfs/sftp:host=hpc-legionlogin.polito.it,user=fbellelli/home/fbellelli/test_kundt/f{f[j]}_SPL{SPL}/probe_{i}_Z.txt',skip_header=1)
-
-            R[j] += data[1]
-            X[j] += data[2]
-
-    # Average over probes
-    R /= 11
-    X /= 11
-
-    # Compute impedance
-    Zs0 = R + 1j*X
-
-    return Zs0
+    return t, p, v
 
 
-def read_impedance_single(SPL, f):
-    # Initialize R and X
-    R = 0
-    X = 0
+def read_pf_sim(SPL, f_exc, ac_cycles=10, start_cycles=5.25):
+    # Load data from HDF5/MAT file
+    with h5py.File(f'/media/fra/Volume/liner_test/01_a_posteriori_validation_NIT/nit_{f_exc}Hz_{SPL}dB_duct.mat', 'r') as f:
+        v = np.array(f['fields/x_velocity'], dtype=float)
+        p = np.array(f['fields/static_pressure'], dtype=float)
+        cc = np.array(f['centroids_m'], dtype=float)
 
-    # Read R and X at each probe
-    for i in range(1,12):
-        data = np.genfromtxt(f'/media/fra/Expansion/NIT/Sharp_SingleT_{f}Hz_{SPL}dB/probe_{i}_Z.txt',skip_header=1)
+    # Define time array
+    dt = 2.111e-05
+    t = dt*np.arange(np.shape(p)[-1])
 
-        R += data[1]
-        X += data[2]
+    # Define spatial arrays
+    x = cc[:,0]
+    y = cc[:,1]
 
-    # Average over probes
-    R /= 11
-    X /= 11
+    # Remove x < 0
+    mask = x < 0
+    x = x[mask]
+    y = y[mask]
+    p = p[mask, :]
+    v = v[mask, :]
 
-    # Compute impedance
-    Zs0 = R + 1j*X
+    # Remove the starting acoustic cycles
+    mask = (t*f_exc >= start_cycles) & (t*f_exc <= start_cycles + ac_cycles)
 
-    return Zs0
+    t = t[mask]
+    t -= t[0]
+
+    p = p[:,mask]
+    v = v[:,mask]
+
+    # Remove mean
+    v -= np.mean(v, axis=1, keepdims=True)
+    p -= np.mean(p, axis=1, keepdims=True)
+
+    # Compute phase average
+    len_cycle = len(t[t*f_exc <= 1])
+    cycles = int(len(t) / len_cycle)
+    p = p[:, 0:cycles * len_cycle]
+    v = v[:, 0:cycles * len_cycle]
+    t = t[0:len_cycle]
+
+    p = np.mean(p.reshape(len(x), cycles, len_cycle), axis=1)
+    v = np.mean(v.reshape(len(x), cycles, len_cycle), axis=1)
+
+    # Resample on uniform 2D grid
+    dx = 5e-5
+    array_x = np.arange(np.min(x), np.max(x), dx)
+    array_y = np.arange(np.min(y), np.max(y), dx)
+    grid_x, grid_y = np.mgrid[min(x):max(x):dx, min(y):max(y):dx]
+
+    p_grid = np.zeros((len(array_x), len(array_y), len(t)))
+    v_grid = np.zeros((len(array_x), len(array_y), len(t)))
+    for i in range(len(t)):
+        p_grid[:, :, i] = griddata((x, y), p[:, i], (grid_x, grid_y), method='linear', fill_value=0.0)
+        v_grid[:, :, i] = griddata((x, y), v[:, i], (grid_x, grid_y), method='linear', fill_value=0.0)
+
+    return t, p_grid, v_grid, array_x, array_y
+
+
+def read_lbc_sim(foldername, p_a, f_exc, ac_cycles=10, start_cycles=1, damp_cycles=2, x_cut=0.04):
+    # Pre compute dx, dt, and number of time steps
+    dx = 3 * nu * cs / (c0 * (tau - 0.5))
+    dt = dx**2 * (tau - 0.5) / (3 * nu)
+    Nt = int(np.ceil((ac_cycles + start_cycles + damp_cycles) / (f_exc*dt)))
+
+    # Remove start and damping acoustic cycles
+    Nt_start = int(np.ceil((start_cycles / f_exc) / dt))
+    Nt_start -= np.mod(Nt_start, save_iter)
+
+    Nt_end = int(np.ceil(((start_cycles + ac_cycles) / f_exc) / dt))
+    Nt_end -= np.mod(Nt_end, save_iter)
+
+    # Define time array
+    Nt = len(range(Nt_start, Nt_end, save_iter))
+    t = dt * save_iter * np.arange(0, Nt)
+
+    # Define spatial arrays
+    mesh = pv.read(f'{foldername}/fields_{f_exc}Hz_{p_a}Pa_00000.vtk')
+
+    dx = mesh.spacing[0]
+    Lx = mesh.dimensions[0]
+    Ly = mesh.dimensions[1]
+
+    x = np.arange(0,dx*Lx,dx)
+    y = np.arange(0,dx*Ly,dx)
+
+    # Cut along x
+    mask = (np.max(x) - x  < x_cut)
+    x = x[mask]
+
+    x -= np.max(x)
+    y -= np.mean(y)
+
+    Lx = len(x)
+
+    # Read simulated TDIBC data from vtk
+    ii = 0
+    p = np.zeros((Ly, Lx, Nt))
+    v = np.zeros((Ly, Lx, Nt))
+
+    for it in range(Nt_start, Nt_end, save_iter):
+        mesh = pv.read(f'{foldername}/fields_{f_exc}Hz_{p_a}Pa_{it:05d}.vtk')
+
+        p_temp = (mesh['density'] * (287.05 * T)).reshape(mesh.dimensions[1], mesh.dimensions[0])
+        v_temp = (mesh['velocity'][:, 0]).reshape(mesh.dimensions[1], mesh.dimensions[0])
+
+        p[:, :, ii] = p_temp[:, mask]
+        v[:, :, ii] = v_temp[:, mask]
+
+        ii += 1
+
+    # Remove mean
+    v -= np.mean(v, axis=2, keepdims=True)
+    p -= np.mean(p, axis=2, keepdims=True)
+
+    # Compute phase average
+    len_cycle = len(t[t*f_exc <= 1])
+    cycles = int(len(t) / len_cycle)
+    p = p[:, :, 0:cycles * len_cycle]
+    v = v[:, :, 0:cycles * len_cycle]
+    t = t[0:len_cycle]
+
+    p = np.mean(p.reshape(Ly, Lx, cycles, len_cycle), axis=2)
+    v = np.mean(v.reshape(Ly, Lx, cycles, len_cycle), axis=2)
+
+    return t, p, v, x, y
+
 
 # Parameters
 c0 = 343.283
@@ -190,6 +277,87 @@ omega = 2 * np.pi * f_hz
 SPL = [130, 145]
 f_exc = [800, 1000, 1400, 2000]
 p_a = [89, 503]
+ac_cycles_pf = [6, 7, 10, 14]
+start_cycles_pf = 5.25 / f_exc[0] * np.array(f_exc, dtype=float)
+
+#%%
+
+# ----------------------------------------------------------------------------------------------------------- #
+#                                               FLOW VIZ                                                      #
+# ----------------------------------------------------------------------------------------------------------- #
+
+for i in range(len(SPL)):
+    for j in range(len(f_exc)):
+        print(f'SPL = {SPL[i]} dB - f = {f_exc[j]} Hz...')
+
+        print('Reading pf...')
+        t_pf, p_pf, v_pf, x_pf, y_pf = read_pf_sim(SPL[i], f_exc[j], ac_cycles=ac_cycles_pf[j], start_cycles=start_cycles_pf[j])
+
+        print('Reading lbc...')
+        t_lc, p_lc, v_lc, x_lc, y_lc = read_lbc_sim('/media/fra/Volume/liner_test/02_tdibc_validation_NIT/orifices', p_a[i], f_exc[j], ac_cycles=10, start_cycles=1, damp_cycles=2, x_cut=0.04)
+
+        POA = 8 * np.pi * (1.17 / 2)**2 / 9.906**2
+        vscale = 9.906/(2 * 1.17)
+        v_lc /= (vscale * POA)
+
+        max_vel = np.round(np.max([np.max(np.abs(v_pf)), np.max(np.abs(v_lc))]))
+
+        idx_inflow_pf = np.unravel_index(np.argmin(v_pf),v_pf.shape)[-1]
+        idx_outflow_pf = np.unravel_index(np.argmax(v_pf),v_pf.shape)[-1]
+
+        idx_inflow_lc = np.unravel_index(np.argmin(v_lc),v_lc.shape)[-1]
+        idx_outflow_lc = np.unravel_index(np.argmax(v_lc),v_lc.shape)[-1]
+
+        print('Plots...')
+        plt.figure()
+        plt.subplot(221)
+        im = plt.pcolormesh(x_pf/1.17e-3,y_pf/1.17e-3,v_pf[:, :, idx_inflow_pf].T,vmin=-max_vel,vmax=max_vel,cmap='bwr')
+        plt.title('Inflow - Ref LBM')
+        plt.ylabel('$y/d$ [-]')
+        plt.xlim(-10,0)
+        plt.ylim(-4, 4)
+
+        plt.subplot(222)
+        plt.pcolormesh(x_lc/1.17e-3,y_lc/1.17e-3,v_lc[:, :, idx_inflow_lc],vmin=-max_vel,vmax=max_vel,cmap='bwr')
+        plt.title('Inflow - TDIM BC')
+        plt.xlim(-10,0)
+        plt.ylim(-4, 4)
+
+        plt.subplot(223)
+        plt.pcolormesh(x_pf/1.17e-3,y_pf/1.17e-3,v_pf[:, :, idx_outflow_pf].T,vmin=-max_vel,vmax=max_vel,cmap='bwr')
+        plt.title('Outflow - Ref LBM')
+        plt.xlabel('$x/d$ [-]')
+        plt.ylabel('$y/d$ [-]')
+        plt.xlim(-10,0)
+        plt.ylim(-4, 4)
+
+        plt.subplot(224)
+        plt.pcolormesh(x_lc/1.17e-3,y_lc/1.17e-3,v_lc[:, :, idx_outflow_lc],vmin=-max_vel,vmax=max_vel,cmap='bwr')
+        plt.title('Outflow - TDIM BC')
+        plt.xlabel('$x/d$ [-]')
+        plt.xlim(-10,0)
+        plt.ylim(-4, 4)
+
+        plt.suptitle(f'SPL = {SPL[i]} dB - f = {f_exc[j]} Hz')
+        plt.tight_layout()
+        plt.colorbar(im, ax=plt.gcf().get_axes(), orientation='vertical', fraction=0.05, pad=0.05, label='$v^\prime$ [m/s]')
+        #plt.savefig(f'plots/inflow_outflow_{f_exc[j]}Hz_{SPL[i]}dB_contour.png', dpi=300, bbox_inches='tight')
+
+        plt.figure()
+        plt.plot(y_pf/1.17e-3,v_pf[-1, :, idx_inflow_pf],'-b')
+        plt.plot(y_pf/1.17e-3,v_pf[-1, :, idx_outflow_pf],'-r')
+        plt.plot(y_lc/1.17e-3,v_lc[:, -1, idx_inflow_lc],'--b')
+        plt.plot(y_lc/1.17e-3,v_lc[:, -1, idx_outflow_lc],'--r')
+        plt.xlabel('$y/d$ [-]')
+        plt.ylabel('$v^\prime$ [m/s]')
+        plt.title(f'SPL = {SPL[i]} dB - f = {f_exc[j]} Hz')
+        plt.xlim(-4, 4)
+        plt.ylim(-max_vel-0.5, max_vel+0.5)
+        plt.legend(['Inflow - Ref LBM','Outflow - Ref LBM','Inflow - TDIM BC','Outflow - TDIM BC'], ncols=1, loc='lower center')
+        plt.tight_layout()
+        #plt.savefig(f'plots/inflow_outflow_{f_exc[j]}Hz_{SPL[i]}dB_line.png', dpi=300, bbox_inches='tight')
+
+        plt.show()
 
 #%% Compute impedance with multi point method (MPM)
 fft_flag = False
@@ -255,36 +423,10 @@ for i in range(len(SPL)):
 #%% Input/Output validation on the cavity surface
 for i in range(len(SPL)):
     for j in range(len(f_exc)):
+        print(f'SPL = {SPL[i]} dB - f = {f_exc[j]} Hz...')
 
-        # Read simulated TDIBC data
-        data = np.genfromtxt(f'sol_new/tdibc_{f_exc[j]}Hz_{p_a[i]}Pa.txt', invalid_raise=False)
-        t = data[:, 0]
-        p = data[:, 1]
-        v = data[:, 2]
-
-        f_p = interp1d(t, p)
-        f_v = interp1d(t, v)
-
-        t = np.linspace(t[0], t[-1], len(t))
-        p = f_p(t)
-        v = f_v(t)
-
-        # Remove the first acoustic cycle
-        mask = (t*f_exc[j] >= 10) & (t*f_exc[j] <= 20)
-
-        t = t[mask]
-        t -= t[0]
-
-        p = p[mask]
-        v = v[mask]
-        
-        # Flip the sign except for 1000 Hz to match reference data phase (different initialization)
-        if f_exc[j] != 1000:
-            p = -p
-            v = -v
-
-        p -= np.mean(p)
-        v -= np.mean(v)
+        t_unif, p_unif, v_unif = read_tdibc('/media/fra/Volume/liner_test/02_tdibc_validation_NIT/uniform', f_exc[j], p_a[i])
+        t_orif, p_orif, v_orif = read_tdibc('/media/fra/Volume/liner_test/02_tdibc_validation_NIT/orifices', f_exc[j], p_a[i])
 
         # Read reference data
         t_ref, v_ref, p_ref = read_facesheet(f'/media/fra/Volume/liner_test/01_a_posteriori_validation_NIT/nit_{f_exc[j]}Hz_{SPL[i]}dB', remove_zero_part=True)
@@ -296,108 +438,101 @@ for i in range(len(SPL)):
         f_ref, p_fft_ref = get_single_sided_fft(p_ref, t_ref)
         _, v_fft_ref = get_single_sided_fft(v_ref, t_ref)
 
-        f, p_fft = get_single_sided_fft(p, t)
-        _, v_fft = get_single_sided_fft(v, t)
+        f_unif, p_fft_unif = get_single_sided_fft(p_unif, t_unif)
+        _, v_fft_unif = get_single_sided_fft(v_unif, t_unif)
+
+        f_orif, p_fft_orif = get_single_sided_fft(p_orif, t_orif)
+        _, v_fft_orif = get_single_sided_fft(v_orif, t_orif)
 
         # Plot results
         plt.figure()
         plt.subplot(221)
-        plt.plot(t*f_exc[j],p)
+        plt.plot(t_unif*f_exc[j],p_unif)
         try:
             plt.plot(t_ref*f_exc[j],p_ref)
         except:
             print()
+        plt.plot(t_orif*f_exc[j],p_orif)
         plt.ylabel('$p^\prime$ [Pa]')
 
         plt.subplot(223)
-        plt.plot(t*f_exc[j],v)
+        plt.plot(t_unif*f_exc[j],v_unif)
         try:
             plt.plot(t_ref*f_exc[j],v_ref)
         except:
             print()
+        plt.plot(t_orif*f_exc[j],v_orif)
         plt.xlabel('$t/t_{cycle}$ [-]')
         plt.ylabel('$v^\prime$ [m/s]')
         plt.suptitle(f'SPL = {SPL[i]} dB - f = {f_exc[j]} Hz')
 
         plt.subplot(222)
-        plt.plot(f/f_exc[j],20*np.log10(np.abs(p_fft)/2e-5))
+        plt.plot(f_unif/f_exc[j],20*np.log10(np.abs(p_fft_unif)/2e-5))
         try:
             plt.plot(f_ref/f_exc[j],20*np.log10(np.abs(p_fft_ref)/2e-5))
         except:
             print()
+        plt.plot(f_orif/f_exc[j],20*np.log10(np.abs(p_fft_orif)/2e-5))
         plt.ylabel('$\\tilde{p}^\prime$ [dB]')
         plt.xlim(0.5, 1.5)
         plt.ylim(0.8*SPL[i], 1.1*SPL[i])
 
         plt.subplot(224)
-        plt.plot(f/f_exc[j],np.abs(v_fft))
+        plt.plot(f_unif/f_exc[j],np.abs(v_fft_unif))
         try:
             plt.plot(f_ref/f_exc[j],np.abs(v_fft_ref))
         except:
             print()
+        plt.plot(f_orif/f_exc[j],np.abs(v_fft_orif))
         plt.xlabel('$f/f_{exc}$ [-]')
         plt.ylabel('$\\tilde{v}^\prime$ [m/s]')
         plt.xlim(0.5, 1.5)
-        plt.figlegend(['TDIBC','LBM'], loc='upper center', ncol=2, bbox_to_anchor=(0.55, 0.965))
+        plt.figlegend(['TDIBC (uniform)','LBM','TDIBC (orifices)'], loc='upper center', ncol=3, bbox_to_anchor=(0.55, 0.965))
         plt.tight_layout()
-        # plt.savefig(f'plots/pressure_and_velocity_{f_exc[j]}Hz_{SPL[i]}dB.png', dpi=300, bbox_inches='tight')
+        #plt.savefig(f'plots/pressure_and_velocity_{f_exc[j]}Hz_{SPL[i]}dB_orifices.png', dpi=300, bbox_inches='tight')
 
         plt.show()
 
-#%% Compare impedance computed with optydb_kundt
 
-# Define the array of frequencies that have been simulated
-f = np.array([800, 1000, 1400, 2000])
+#%%
 
-# Initialize resistance (R) and reactance (X)
-R = np.zeros(len(f))
-X = np.zeros(len(f))
+# ----------------------------------------------------------------------------------------------------------- #
+#                                              TRASH CAN                                                      #
+# ----------------------------------------------------------------------------------------------------------- #
 
-# Read R and X at each probe
-for j in range(len(f)):
-    for i in range(1,12):
-        data = np.genfromtxt(f'/run/user/1000/gvfs/sftp:host=hpc-legionlogin.polito.it,user=fbellelli/home/fbellelli/test_kundt/test5/f{f[j]}_SPL{130}/probe_{i}_Z.txt',skip_header=1)
+# Write probes for optydb_kundt impedance calculation
 
-        R[j] += data[1]
-        X[j] += data[2]
+def write_file_probe(t, p, u, rho, x, i):
 
-# Average over probes
-R /= 11
-X /= 11
+    # Sample data: A list of lists or tuples containing your numerical values
+    p += 101325*np.ones_like(p)
+    data = np.column_stack((t, p, u, rho))
 
-plt.figure(1)
-plt.subplot(211)
-plt.plot(f,R,'om')
+    file_path = f'probe_{i}.txt'
 
-plt.subplot(212)
-plt.plot(f,R,'om')
+    with open(file_path, "w") as f:
+        # 1. Write the metadata headers
+        f.write("# Time history output for all variables, bands and points\n")
+        f.write(f"# Number of frames = {len(data)}\n")
+        f.write("# Number of variables = 3\n")
+        f.write("# Number of bands = 1\n")
+        f.write("# Number of points = 1\n")
+        f.write("# Description of columns: \n")
+        f.write("# Column, Point_#, (X (m),Y (m),Z (m)), Variable_#, Variable name, Band_#, Freq_range\n")
+        f.write("# 1, time(sec)\n")
+        f.write(f"# 2, 0, ({x},7.87443e-05,7.87443e-05), 0, ExtractSignal Pressure, 0, Single frequency band\n")
+        f.write(f"# 3, 0, ({x},7.87443e-05,7.87443e-05), 1, ExtractSignal X-Velocity, 0, Single frequency band\n")
+        f.write(f"# 4, 0, ({x},7.87443e-05,7.87443e-05), 2, ExtractSignal Density, 0, Single frequency band\n")
 
-# Initialize resistance (R) and reactance (X)
-R = np.zeros(len(f))
-X = np.zeros(len(f))
+        # 2. Write the numerical data
+        for row in data:
+            # Convert each number to a string and join with a space
+            line = " ".join(map(str, row))
+            f.write(line + "\n")
 
-# Read R and X at each probe
-for j in range(len(f)):
-    for i in range(1,12):
-        data = np.genfromtxt(f'/run/user/1000/gvfs/sftp:host=hpc-legionlogin.polito.it,user=fbellelli/home/fbellelli/test_kundt/test6/f{f[j]}_SPL{130}/probe_{i}_Z.txt',skip_header=1)
+    return
 
-        R[j] += data[1]
-        X[j] += data[2]
 
-# Average over probes
-R /= 11
-X /= 11
-
-plt.figure(1)
-plt.subplot(211)
-plt.plot(f,R,'xg')
-
-plt.subplot(212)
-plt.plot(f,X,'xg')
-
-plt.show()
-
-#%% Write probes for optydb_kundt impedance calculation
 for i in range(len(SPL)):
     for j in range(len(f_exc)):
         print(f'SPL = {SPL[i]} dB - f = {f_exc[j]} Hz...')
@@ -443,6 +578,29 @@ for i in range(len(SPL)):
             shutil.move(str(file_path), str(target_dir / file_path.name))
 
 #%% Find optimal probe location for resistance calculation
+
+def read_impedance_single(SPL, f):
+    # Initialize R and X
+    R = 0
+    X = 0
+
+    # Read R and X at each probe
+    for i in range(1,12):
+        data = np.genfromtxt(f'/media/fra/Expansion/NIT/Sharp_SingleT_{f}Hz_{SPL}dB/probe_{i}_Z.txt',skip_header=1)
+
+        R += data[1]
+        X += data[2]
+
+    # Average over probes
+    R /= 11
+    X /= 11
+
+    # Compute impedance
+    Zs0 = R + 1j*X
+
+    return Zs0
+
+
 SPL = [145]
 f_exc = [800]
 p_a = [89 if SPL[0] == 130 else 503]

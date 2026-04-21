@@ -5,7 +5,7 @@
 #include <omp.h>
 #include "lbm.h"
 #define Q 9
-#define save_iter 500
+#define save_iter 50
 #define disp_iter 10
 #define N 2
 
@@ -61,12 +61,12 @@ int load_impedance_data(const char *filename, double *zinf_ptr, double a[],
     if (fscanf(fptr, "%lf", zinf_ptr) != 1) return 1;
 
     // Read array values
-    for (int i = 0; i < N; i++) fscanf(fptr, "%lf", &a[i]);
-    for (int i = 0; i < N; i++) fscanf(fptr, "%lf", &l[i]);
-    for (int i = 0; i < N; i++) fscanf(fptr, "%lf", &b[i]);
-    for (int i = 0; i < N; i++) fscanf(fptr, "%lf", &c[i]);
-    for (int i = 0; i < N; i++) fscanf(fptr, "%lf", &al[i]);
-    for (int i = 0; i < N; i++) fscanf(fptr, "%lf", &be[i]);
+    for (int i = 0; i < N; i++) if (fscanf(fptr, "%lf", &a[i]) != 1) return 1;
+    for (int i = 0; i < N; i++) if (fscanf(fptr, "%lf", &l[i]) != 1) return 1;
+    for (int i = 0; i < N; i++) if (fscanf(fptr, "%lf", &b[i]) != 1) return 1;
+    for (int i = 0; i < N; i++) if (fscanf(fptr, "%lf", &c[i]) != 1) return 1;
+    for (int i = 0; i < N; i++) if (fscanf(fptr, "%lf", &al[i]) != 1) return 1;
+    for (int i = 0; i < N; i++) if (fscanf(fptr, "%lf", &be[i]) != 1) return 1;
 
     fclose(fptr);
 
@@ -88,7 +88,11 @@ int main(int argc, char *argv[]){
     double f_exc = atof(argv[2]);                 // Excitation frequency [Hz] (800, 1000, 1400, 2000)
 
     // Computational domain (physical units)
-    int Ny = 3;                                   // Number of points along y [-]
+    int N_o = 2;                                  // Number of orifices [-]
+    double Ly = 0.009906;                         // Domain length along y [m]
+    double y1 = 0.002528;                         // Orifice 1 location along y [m]
+    double y2 = 0.007478;                         // Orifice 2 location along y [m]
+    double d = 0.00117;                           // Orifice diameter [m]
     int ac_cycles = 10;                           // Number of acoustic cycles [-]
     int damping_cycles = 2;                       // Number of damping cycles [-]
     int start_cycles = 1;                         // Number of starting cycles [-]
@@ -122,6 +126,7 @@ int main(int argc, char *argv[]){
     double x_end = Lx - start_cycles*lambda;      // Wave packet end [m]
     double x_start = x_end - ac_cycles*lambda;    // Wave packet start [m]
     int Nx = ceil(Lx / dx);                       // Number of points along x [-]
+    int Ny = ceil(Ly / dx);                       // Number of points along y [-]
     int Nt = ceil(tot_cycles / (f_exc*dt));       // Number of time steps [-]
 
     // Read impedance fitting data
@@ -149,14 +154,24 @@ int main(int argc, char *argv[]){
 
     boundaries[0].apply = periodic_y;
 
+    double r0[Ny];
+    for (int j = 0; j < Ny; j++){
+        r0[j] = rho_0;
+    }
+
     boundaries[1].apply = pressure_inlet;
     boundaries[1].index = 0;
-    boundaries[1].val1 = rho_0;
+    boundaries[1].val1 = r0;
 
-    boundaries[2].apply = velocity_outlet;
+    double dmy[Ny];
+    for (int j = 0; j < Ny; j++) {
+        dmy[j] = 0.0;
+    } 
+
+    boundaries[2].apply = velocity_outlet_regularized;
     boundaries[2].index = Nx-1;
-    boundaries[2].val1 = 0.0;
-    boundaries[2].val2 = 0.0;
+    boundaries[2].val1 = dmy;
+    boundaries[2].val2 = dmy;
 
     // Check on max Mach number in lattice units
     double Ma_max = rho_a / rho_0;
@@ -238,6 +253,7 @@ int main(int argc, char *argv[]){
 
     double p_fluc = 0.0;
     double v_ac = 0.0;
+    double vBC[Ny];
 
     // Ensure that the "sol" directory exists and, if not, create it
     ensure_directory_exists("sol");
@@ -251,12 +267,12 @@ int main(int argc, char *argv[]){
     for (int it = 0; it < Nt; it++){
 
         // Print the timestep
-        if (it % disp_iter == 0) printf("Step %d of %d\n ", it, Nt);
+        if (it % disp_iter == 0) printf("Step %d of %d - p_fluc = %g - v_ac = %g\n ", it, Nt, p_fluc, v_ac);
 
         // Save acoustic pressure and velocity
         fprintf(fp, "%lf %lf %lf\n", it * dt, p_fluc, v_ac);
 
-        // Compute surface averaged pressure fluctuations
+        // Compute surface averaged pressure fluctuations (physical units)
         double rho_surf = 0.0;
         for (int j = 0; j < Ny; j++){
             rho_surf += rho[j][Nx - 1];
@@ -264,9 +280,27 @@ int main(int argc, char *argv[]){
         rho_surf /= Ny;
         p_fluc = cs * cs * (rho_surf - rho_0) * cp;
 
-        // Apply TDIM BC (ADE IVP)
+        // Compute acoustic velocity solving ADE IVP (physical units)
         v_ac = compute_acoustic_velocity(p_fluc, dt, Zinf, A, B, C, lambdas, alpha, beta, phi, psi, chi);
-        boundaries[2].val1 = v_ac / cu;
+
+        double temporary_velocity = (4 * Ly * Ly) / (N_o * d * d) * (v_ac / cu);
+        if ((temporary_velocity / cs) > 0.2) {
+            printf("Warning, max Mach number greater than 0.2 (%g)!\n", temporary_velocity / cs);
+        }
+
+        // Fill the local values of the acoustic velocity on the cavity surface (lattice units)
+        for (int j = 0; j < Ny; j++){
+            double y = j * dx;
+
+            if ((y >= y1 - d/2 && y <= y1 + d/2) | (y >= y2 - d/2 && y <= y2 + d/2)) {
+                vBC[j] = temporary_velocity;
+            } else {
+                vBC[j] = 0.0;
+            }
+        }
+
+        // Apply acoustic velocity TDIM BC (lattice units)
+        boundaries[2].val1 = vBC;
 
         // Execute the streaming and colliding steps
         main_lbm(Nx,Ny,Q,f,f_new,rho,u,v,cx,cy,w,opp,omega_eff,solid_mask,boundaries,num_boundaries,isperiodic_x,isperiodic_y,Fx,Fy,&L,&D,phi_solid,use_IBB);

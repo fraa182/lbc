@@ -6,8 +6,8 @@ typedef void (*BCFunction)(
     int Ny, 
     int Q, 
     int index, 
-    double val1, 
-    double val2,
+    const double *val1, 
+    const double *val2,
     double f[Ny][Nx][Q],
     double f_new[Ny][Nx][Q],
     double rho[Ny][Nx], 
@@ -21,8 +21,8 @@ typedef void (*BCFunction)(
 
 typedef struct {
     int index;
-    double val1;
-    double val2;
+    const double *val1;
+    const double *val2;
     BCFunction apply; 
 } Boundary;
 

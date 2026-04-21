@@ -3,8 +3,8 @@ void velocity_top(
     int Ny,
     int Q, 
     int index,
-    double val1, 
-    double val2,
+    const double *val1, 
+    const double *val2,
     double f[Ny][Nx][Q],
     double f_new[Ny][Nx][Q], 
     double rho[Ny][Nx], 
@@ -15,14 +15,15 @@ void velocity_top(
     int cy[],
     double w[]
 ) {
-    double U_top = val1;
-    double V_top = val2;
     int j_top = index;
     
     #pragma omp parallel for
     for (int i = 0; i < Nx; i++) {
 
         if (solid_mask[j_top][i]) continue;
+
+        double U_top = val1[i];
+        double V_top = val2[i];
 
         double f0 = f_new[j_top][i][0];
         double f1 = f_new[j_top][i][1];

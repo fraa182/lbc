@@ -3,8 +3,8 @@ void pressure_outlet(
     int Ny,
     int Q, 
     int index,
-    double val1, 
-    double val2,
+    const double *val1, 
+    const double *val2,
     double f[Ny][Nx][Q],
     double f_new[Ny][Nx][Q], 
     double rho[Ny][Nx], 
@@ -15,13 +15,14 @@ void pressure_outlet(
     int cy[],
     double w[]
 ) {
-    double rho_out = val1; 
     int i_out = index;
     
     #pragma omp parallel for
     for (int j = 0; j < Ny; j++) {
 
         if (solid_mask[j][i_out]) continue;
+
+        double rho_out = val1[j];
 
         double f0 = f_new[j][i_out][0];
         double f2 = f_new[j][i_out][2];
