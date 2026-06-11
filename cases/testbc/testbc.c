@@ -8,17 +8,30 @@
 #define save_iter 10
 #define disp_iter 100
 
+double smooth_step(double d, double y, double y0, double delta) {
+
+	double x = (d/2 - fabs(y - y0)) / (delta * d);
+	double profile = 0.5 * (1.0 + tanh(x));
+	
+    return profile;
+}
+
 // Main function
 int main(int argc, char *argv[]){
 
     // Computational domain (physical units)
-    int Nt = 500;                                 // Number of time steps [-]
-    double Lx = 0.010;                            // Domain length along x [m]
+    int Nt = 10000;                               // Number of time steps [-]
+    double Lx = 0.500;                            // Domain length along x [m]
     double Ly = 0.010;                            // Domain length along y [m]
     double c0 = 340.0;                            // Sound speed [m/s]
     double tau = 0.5005;                          // Relaxation time [-]
     double nu = 1.5e-5;                           // Kinematic viscosity [m^2/s]
     double rho_0 = 1.184;                         // Uniform density at rest [kg/m^3]
+
+    double y1 = 0.002528;                         // Orifice 1 location along y [m]
+    double y2 = 0.007478;                         // Orifice 2 location along y [m]
+    double d = 0.00117;                           // Orifice diameter [m]
+    double delta = 0.1;                           // Smoothing delta for orifice profile [-]
 
     // Conversion factors (physical to lattice units)
     double cs = 1.0 / sqrt(3.0);                  // Speed of sound [m/s]
@@ -41,39 +54,30 @@ int main(int argc, char *argv[]){
 
     // Boundary conditions
     int use_IBB = 0;                              // Use IBB (1: yes, 0: no) [-]
-    int num_boundaries = 4;                       // Number of boundary conditions [-]
+    int num_boundaries = 3;                       // Number of boundary conditions [-]
 
     Boundary boundaries[num_boundaries];
 
-    double dmy_inout[Ny];
-    for (int j = 0; j < Ny; j++) {
-        dmy_inout[j] = 0.0;
-    } 
+    boundaries[0].apply = periodic_y;
 
-    double dmy_topbot[Nx];
-    for (int i = 0; i < Nx; i++) {
-        dmy_topbot[i] = 0.0;
+    double r0[Ny];
+    for (int j = 0; j < Ny; j++){
+        r0[j] = rho_0;
     }
 
-    boundaries[0].apply = velocity_inlet_regularized;
-    boundaries[0].index = 0;
-    boundaries[0].val1 = dmy_inout;
-    boundaries[0].val2 = dmy_inout;
+    boundaries[1].apply = pressure_inlet;
+    boundaries[1].index = 0;
+    boundaries[1].val1 = r0;
 
-    boundaries[1].apply = velocity_outlet_regularized;
-    boundaries[1].index = Nx-1;
-    boundaries[1].val1 = dmy_inout;
-    boundaries[1].val2 = dmy_inout;
+    double dmy[Ny];
+    for (int j = 0; j < Ny; j++) {
+        dmy[j] = 0.0;
+    } 
 
-    boundaries[2].apply = velocity_bottom_regularized;
-    boundaries[2].index = 0;
-    boundaries[2].val1 = dmy_topbot;
-    boundaries[2].val2 = dmy_topbot;
-
-    boundaries[3].apply = velocity_top_regularized;
-    boundaries[3].index = Ny-1;
-    boundaries[3].val1 = dmy_topbot;
-    boundaries[3].val2 = dmy_topbot;
+    boundaries[2].apply = velocity_outlet_regularized;
+    boundaries[2].index = Nx-1;
+    boundaries[2].val1 = dmy;
+    boundaries[2].val2 = dmy;
 
     // Check if there is a periodic BC along x and/or y
     int isperiodic_x = 0;
@@ -142,8 +146,7 @@ int main(int argc, char *argv[]){
     double D = 0.0;
 
     double v_bc = 0.0;
-    double vBC_inout[Ny];
-    double vBC_topbot[Nx];
+    double vBC[Ny];
 
     // Ensure that the "sol" directory exists and, if not, create it
     ensure_directory_exists("sol");
@@ -155,22 +158,17 @@ int main(int argc, char *argv[]){
         if (it % disp_iter == 0) printf("Step %d of %d\n ", it, Nt);
 
         // Define boundary velocity (physical units)
-        v_bc = 2 * sin(2 * M_PI * it / 50.0);
+        v_bc = 15 * sin(2 * M_PI * it / 800.0);
 
         // Fill the local values of velocity (lattice units)
         for (int j = 0; j < Ny; j++){
-            vBC_inout[j] = (v_bc / cu) * sin(2 * M_PI * 2 * j * dx / Ly);
-        }
-
-        for (int i = 0; i < Nx; i++){
-            vBC_topbot[i] = (v_bc / cu) * sin(2 * M_PI * 2 * i * dx / Lx);
+            double y = j * dx;
+	        double profile = smooth_step(d, y, y1, delta) + smooth_step(d, y, y2, delta);
+            vBC[j] = (v_bc / cu) * profile;
         }
 
         // Apply velocity BC (lattice units)
-        boundaries[0].val1 = vBC_inout;
-        boundaries[1].val1 = vBC_inout;
-        boundaries[2].val2 = vBC_topbot;
-        boundaries[3].val2 = vBC_topbot;
+        boundaries[2].val1 = vBC;
 
         // Execute the streaming and colliding steps
         main_lbm(Nx,Ny,Q,f,f_new,rho,u,v,cx,cy,w,opp,omega_eff,solid_mask,boundaries,num_boundaries,isperiodic_x,isperiodic_y,Fx,Fy,&L,&D,phi_solid,use_IBB);

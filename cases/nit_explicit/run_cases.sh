@@ -17,31 +17,17 @@ echo ""
 
 export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
 
-echo "Uniform case"
 for p_a in 89 503; do
     for f_exc in 800 1000 1400 2000; do
     	echo ""
     	echo "Pressure amplitude: $p_a Pa, frequency: $f_exc Hz"
-    	./nit.o $p_a $f_exc 1.00
+    	./nit_explicit.o $p_a $f_exc
     	echo "-------------------------------------------------"
     done
 done
 echo ""
 
-mv sol uniform
-
-echo "Orifices case"
-for p_a in 89 503; do
-    for f_exc in 800 1000 1400 2000; do
-        echo ""
-		echo "Pressure amplitude: $p_a Pa, frequency: $f_exc Hz"
-		./nit.o $p_a $f_exc 0.10
-		echo "-------------------------------------------------"
-	done
-done
-echo ""
-
-mv sol orifices
+mv sol explicit
 
 echo "Done!"
 echo ""

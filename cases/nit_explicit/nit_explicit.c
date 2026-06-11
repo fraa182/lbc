@@ -6,115 +6,27 @@
 #include "lbm.h"
 #define Q 9
 #define disp_iter 10
-#define N 2
-
-// Ancillary functions
-void ade_solver_exact(double dt, double p_fluc, 
-                      const double lambdas[N], const double alpha[N], const double beta[N],
-                      const double phi_prev[N], const double psi_prev[N], const double chi_prev[N],
-                      double phi_out[N], double psi_out[N], double chi_out[N]) {
-
-    for (int i = 0; i < N; i++) {
-        // phi
-        double exp_lambda_dt = exp(lambdas[i] * dt);
-        double coeff_p;
-
-        if (fabs(lambdas[i]) > 1e-14)
-            coeff_p = (exp_lambda_dt - 1.0) / lambdas[i];
-        else
-            coeff_p = dt;
-
-        // psi and chi
-        double a = alpha[i];
-        double b = beta[i];
-
-        double exp_a = exp(a * dt);
-        double cos_b = cos(b * dt);
-        double sin_b = sin(b * dt);
-
-        // homogeneous
-        double psi_h = exp_a * (cos_b * psi_prev[i] - sin_b * chi_prev[i]);
-        double chi_h = exp_a * (sin_b * psi_prev[i] + cos_b * chi_prev[i]);
-
-        // particular
-        double denom = a*a + b*b;
-        double I1, I2;
-
-        if (denom > 1e-14) {
-            I1 = (exp_a * (a*cos_b + b*sin_b) - a) / denom;
-            I2 = (exp_a * (b*cos_b - a*sin_b) - b) / denom;
-        } else {
-            I1 = dt;
-            I2 = 0.0;
-        }
-
-        phi_out[i] = exp_lambda_dt * phi_prev[i] + coeff_p * p_fluc;
-        psi_out[i] = psi_h + p_fluc * I1;
-        chi_out[i] = chi_h + p_fluc * I2;
-    }
-}
-
-int load_impedance_data(const char *filename, double *zinf_ptr, double a[], 
-                    double l[], double b[], double c[], 
-                    double al[], double be[]) {
-    
-    FILE *fptr = fopen(filename, "r");
-
-    // Error opening file
-    if (fptr == NULL) {
-        return 1; 
-    }
-
-    // Read single value into the memory address provided
-    if (fscanf(fptr, "%lf", zinf_ptr) != 1) return 1;
-
-    // Read array values
-    for (int i = 0; i < N; i++) if (fscanf(fptr, "%lf", &a[i]) != 1) return 1;
-    for (int i = 0; i < N; i++) if (fscanf(fptr, "%lf", &l[i]) != 1) return 1;
-    for (int i = 0; i < N; i++) if (fscanf(fptr, "%lf", &b[i]) != 1) return 1;
-    for (int i = 0; i < N; i++) if (fscanf(fptr, "%lf", &c[i]) != 1) return 1;
-    for (int i = 0; i < N; i++) if (fscanf(fptr, "%lf", &al[i]) != 1) return 1;
-    for (int i = 0; i < N; i++) if (fscanf(fptr, "%lf", &be[i]) != 1) return 1;
-
-    fclose(fptr);
-
-    return 0;
-}
-
-double smooth_step(double d, double y, double y0, double delta) {
-
-    double profile;
-    if (delta <= 0.0) {
-        profile = (y >= y0 - d/2 && y <= y0 + d/2) ? 1.0 : 0.0;
-    } else if (delta >= 1.0) {
-        profile = 0.5;
-    } else {
-        double x = (d/2 - fabs(y - y0)) / (delta * d);
-        profile = 0.5 * (1.0 + tanh(x));
-    }
-	
-    return profile;
-}
 
 // Main function
 int main(int argc, char *argv[]){
 
     // Check if the correct number of arguments is provided
-    if (argc < 4) {
-        fprintf(stderr, "Usage: %s <p_a> <f_exc> <delta>\n", argv[0]);
-        fprintf(stderr, "Example: %s 89 800 0.10\n", argv[0]);
+    if (argc < 3) {
+        fprintf(stderr, "Usage: %s <p_a> <f_exc>\n", argv[0]);
+        fprintf(stderr, "Example: %s 89 800\n", argv[0]);
         return 1;
     }
 
     // UI parameters (pressure amplitude [Pa] and excitation frequency [Hz])
     double p_a = atof(argv[1]);                   // Pressure amplitude [Pa] (89 -> 130 dB, 503 -> 145 dB)
     double f_exc = atof(argv[2]);                 // Excitation frequency [Hz] (800, 1000, 1400, 2000)
-    double delta = atof(argv[3]);                 // Smoothing delta for orifice profile (>= 1 is uniform) [-]
 
     // Computational domain (physical units)
     double d = 0.00117;                           // Orifice diameter (CHAR LENGTH) [m]
     double Ly = 0.009906;                         // Domain length along y [m]
-    int res = 10;                                 // Resolution (voxels per char length) [-]
+    double tc = 5.500e-4;                         // Facesheet thickness [m]
+    double zt = 3.865e-2;                         // Cavity length [m]
+    int res = 20;                                 // Resolution (voxels per char length) [-]
     int ac_cycles = 10;                           // Number of acoustic cycles [-]
     int damping_cycles = 2;                       // Number of damping cycles [-]
     int start_cycles = 0;                         // Number of starting cycles [-]
@@ -145,43 +57,19 @@ int main(int argc, char *argv[]){
     int tot_cycles = start_cycles + ac_cycles + damping_cycles;
     int sim_cycles = start_cycles + ac_cycles; 
     double lambda = c0 / f_exc;                   // Wavelength along x [m]
-    double Lx = tot_cycles * lambda;              // Domain length along x [m]
+    double Lx = tot_cycles * lambda + zt + 2 * tc;// Domain length along x [m]
     double kx = 2 * M_PI / lambda;                // Wavenumber along x [1/m]
     double rho_a = (p_a / cp) / (cs * cs);        // Density amplitude [kg/m^3]
-    double x_end = Lx - start_cycles*lambda;      // Wave packet end [m]
+    double x_end = tot_cycles * lambda - start_cycles*lambda;      // Wave packet end [m]
     double x_start = x_end - ac_cycles*lambda;    // Wave packet start [m]
     double dt_eff = 1.0 / (2 * f_exc);            // Effective time step [s]
     double y1 = 0.255198869 * Ly;                 // Orifice 1 location along y [m]
     double y2 = 0.754896023 * Ly;                 // Orifice 2 location along y [m]
     int Nx = ceil(Lx / dx);                       // Number of points along x [-]
-    int Ny = (delta < 1.0) ? ceil(Ly / dx) : 3;   // Number of points along y [-]
+    int Ny = ceil((Ly + 2 * tc) / dx);            // Number of points along y [-]
     int Nt = ceil(sim_cycles / (f_exc * dt));     // Number of time steps [-]
     int init_save = floor((start_cycles + 0.25) / (f_exc * dt));   // Number of iterations to start saving [-]
     int save_iter = floor(dt_eff / dt);           // Every how many iterations to save [-]
-
-    // Define velocity scale factor when the acoustic velocity is not applied uniformly
-    double velocity_scale_factor = (delta < 1.0) ? (2 * d / Ly) : 1.0;
-    printf("\n");
-    printf("Velocity scale factor: %g\n", velocity_scale_factor);
-
-    // Read admittance fitting data
-    double Yinf;
-    double A[N], lambdas[N], B[N], C[N], alpha[N], beta[N];
-    char filename_impedance[256];
-
-    printf("\n");
-    printf("Loading admittance...\n");
-    snprintf(filename_impedance, sizeof(filename_impedance),"admittance_%gPa.txt", p_a);
-    if (load_impedance_data(filename_impedance, &Yinf, A, lambdas, B, C, alpha, beta) == 0) {
-        printf("Admittance data loaded successfully.\n");
-    } else {
-        printf("Failed to load admittance data.\n");
-    }
-
-    // Initialize ADE states
-    double phi[N] = {0, 0};
-    double psi[N] = {0, 0};
-    double chi[N] = {0, 0};
 
     // Boundary conditions
     int isperiodic_x = 0;
@@ -193,6 +81,7 @@ int main(int argc, char *argv[]){
     }
 
     // Check on max Mach number in lattice units
+    printf("\n");
     double Ma_max = rho_a / rho_0;
     if (Ma_max > 0.2) printf("Warning: Maximum Mach number in lattice units > 0.2 (%.2f)\n", Ma_max);
 
@@ -205,6 +94,7 @@ int main(int argc, char *argv[]){
     }
 
     // Display simulation info
+    printf("Relaxation time: %g - Turbulence relaxation time: %g\n", tau, tau_turb);
     printf("Lattice size: %g - Time step: %g - Maximum lattice Mach: %g\n", dx, dt, Ma_max);
     printf("Pressure amplitude: %g Pa - Excitation frequency: %g Hz\n", p_a, f_exc);
 
@@ -215,13 +105,27 @@ int main(int argc, char *argv[]){
     // Lattice weights (D2Q9)
     double w[Q] = {4.0/9.0, 1.0/9.0, 1.0/9.0, 1.0/9.0, 1.0/9.0, 1.0/36.0, 1.0/36.0, 1.0/36.0, 1.0/36.0};
 
+    // Indices of opposite directions for D2Q9 lattice
+    int opp[Q] = {0, 3, 4, 1, 2, 7, 8, 5, 6};
+
     // Solid mask (staircase approximation) and signed distance (IBB)
     int (*solid_mask)[Nx] = malloc(Ny * sizeof *solid_mask);
-    double (*phi_solid)[Nx] = malloc(Ny * sizeof *phi_solid);
+    double x_duct_end = tot_cycles * lambda;
     for (int j = 0; j < Ny; j++){
+        double y = j * dx;
         for (int i = 0; i < Nx; i++){
-            solid_mask[j][i] = 0;
-            phi_solid[j][i] = 0.0;
+            double x = i * dx;
+            if (((x >= x_duct_end) & (x <= x_duct_end + tc)) | ((x >= Lx - tc) & (x <= Lx))) {
+                solid_mask[j][i] = 1;
+            } else if ((x >= x_duct_end) & (((y >= 0) & (y <= tc)) | ((y >= Ly + tc) & (y <= Ly + 2 * tc)))) {
+                solid_mask[j][i] = 1;
+            } else {
+                solid_mask[j][i] = 0;
+            }
+
+            if (((x >= x_duct_end) & (x <= x_duct_end + tc)) & (((y >= tc + y1 - d/2) & (y <= tc + y1 + d/2)) | ((y >= tc + y2 - d/2) & (y <= tc + y2 + d/2)))) {
+                solid_mask[j][i] = 0;
+            }
         }
     }
 
@@ -270,38 +174,30 @@ int main(int argc, char *argv[]){
     snprintf(filename_tdibc, sizeof(filename_tdibc),"sol/tdibc_%gHz_%gPa.txt", f_exc, p_a);
     FILE *fp = fopen(filename_tdibc, "w");
 
-    // Define outlet admittance BC utility quantities
-    int i_out = Nx - 1;
-    double v_ac = 0.0;
+    // Write initial solution
+    char filename[256];
+    snprintf(filename, sizeof(filename),"sol/fields_%gHz_%gPa_init.vtk", f_exc, p_a);
+    write_vtk_binary_2D(filename, Nx, Ny, dx, u, v, rho, cu, crho);
+
+    double rho_surf = 0.0;
     double p_ac = 0.0;
-    double D = 0.0;
-
-    double v_ac_write = 0.0;
-    double rho_surf = 0.0;    
-
-    double dot_A_phi = 0.0;
-    double dot_B_psi = 0.0;
-    double dot_C_chi = 0.0;
-    double Delta = 0.0;
-
-    double A_ADE = 0.0;
-    double B_ADE = 0.0;
-    double C_ADE = 0.0;
-
-    double u_out[Ny];
-    double v_out[Ny];
+    double v_ac = 0.0;
+    int i_surf = floor(x_duct_end / dx) - 1;
 
     // Main LBM loop
     for (int it = 0; it < Nt; it++){
 
         // Print the timestep
-        if (it % disp_iter == 0) printf("Step %d of %d - p_ac = %g - v_ac = %g\n ", it, Nt, p_ac, v_ac_write);
+        if (it % disp_iter == 0) printf("Step %d of %d - p_ac = %g - v_ac = %g\n ", it, Nt, p_ac, v_ac);
 
         // Save acoustic quantities on the liner surface
-        fprintf(fp, "%lf %lf %lf\n", it * dt, p_ac, v_ac_write);
+        fprintf(fp, "%lf %lf %lf\n", it * dt, p_ac, v_ac);
 
         // Collision
         collision(Nx,Ny,Q,f,rho,u,v,omega_eff,solid_mask,cx,cy,w,Fx,Fy);
+
+        // Bounce-back at solid walls
+        bounce_back(Nx,Ny,Q,f,f_new,solid_mask,cx,cy,opp,isperiodic_x,isperiodic_y);
 
         // Streaming
         streaming(Nx,Ny,Q,f,f_new,solid_mask,cx,cy,isperiodic_x,isperiodic_y);
@@ -312,63 +208,21 @@ int main(int argc, char *argv[]){
         // Pressure inlet BC
         pressure_inlet(Nx,Ny,Q,0,r0,0,f,f_new,rho,u,v,solid_mask,cx,cy,w);
 
-        // Admittance outlet BC
-        dot_A_phi = 0.0;
-        dot_B_psi = 0.0;
-        dot_C_chi = 0.0;
-
-        for (int i = 0; i < N; i++) {
-            dot_A_phi += A[i] * phi[i];
-            dot_B_psi += B[i] * psi[i];
-            dot_C_chi += C[i] * chi[i];
-        }
-
-        Delta = -dot_A_phi - 2.0 * (dot_B_psi + dot_C_chi);
-
-        D = 0.0;
-        for (int j = 0; j < Ny; j++) {          
-            double f0 = f_new[j][i_out][0];
-            double f2 = f_new[j][i_out][2];
-            double f4 = f_new[j][i_out][4];
-            double f1 = f_new[j][i_out][1];
-            double f5 = f_new[j][i_out][5];
-            double f8 = f_new[j][i_out][8];
-
-            D += (f0 + f2 + f4 + 2.0 * (f1 + f5 + f8));
-        }
-        D /= Ny;
-
-        A_ADE = 1.0;
-        B_ADE = cu + (Yinf * c0 * c0 * rho_0 - Delta);
-        C_ADE = cu * (Yinf * c0 * c0 * rho_0 - Delta) - Yinf * c0 * c0 * cu * D;
-
-        v_ac = (-B_ADE + sqrt(B_ADE*B_ADE - 4.0*A_ADE*C_ADE)) / (2.0*A_ADE);
-
-        for (int j = 0; j < Ny; j++) {
-            double y = j * dx;
-            double profile = smooth_step(d, y, y1, delta) + smooth_step(d, y, y2, delta);
-
-            u_out[j] = (v_ac / cu) * profile / velocity_scale_factor;
-            v_out[j] = 0.0; 
-        }
-        velocity_outlet_regularized(Nx,Ny,Q,i_out,u_out,v_out,f,f_new,rho,u,v,solid_mask,cx,cy,w);
-
         // Compute macroscopic quantities
         compute_macroscopic_fields(Nx,Ny,Q,f_new,solid_mask,cx,cy,rho,u,v,Fx,Fy);
 
-        // Compute acoustic pressure on the liner surface
+        // Compute and save acoustic quantities on the liner surface
         rho_surf = 0.0;
-        v_ac_write = 0.0;
+        v_ac = 0.0;
         for (int j = 0; j < Ny; j++) {
-            rho_surf += rho[j][i_out];
-            v_ac_write += u[j][i_out] * cu;
+            rho_surf += rho[j][i_surf];
+            v_ac += u[j][i_surf] * cu;
         }
-        v_ac_write /= Ny;
+        v_ac /= Ny;
         rho_surf /= Ny;
         p_ac = c0 * c0 * (rho_surf - rho_0);
-        
-        // Update ADE states
-        ade_solver_exact(dt, p_ac, lambdas, alpha, beta, phi, psi, chi, phi, psi, chi);
+
+        fprintf(fp, "%lf %lf %lf\n", it * dt, p_ac, v_ac);
 
         // Swap f and f_new
         double (*temp_ptr)[Nx][Q] = f;
@@ -392,7 +246,6 @@ int main(int argc, char *argv[]){
     free(V_in);
     free(rho_in);
     free(solid_mask);
-    free(phi_solid);
     free(omega_eff);
     free(rho);
     free(u);
